@@ -8,6 +8,14 @@
 
 在開始使用本儲存庫進行部署之前，請確保您的環境中已安裝並設定好以下工具：
 
+> [!TIP]
+> **給 AI Agent 的一鍵安裝提示詞**
+> 如果您正在使用 AI Coding Agent，可以複製以下提示詞，讓它自動幫您安裝所需的環境工具：
+> ```text
+> help me install aws cli , session-manager-plugin and ecsctl per https://github.com/oablab/ecsctl ,
+>   if already installed. skip
+> ```
+
 1. **AWS CLI**：用於與 AWS 進行身份驗證與 API 互動。
    * [官方安裝指南](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 2. **AWS Session Manager Plugin**：使 `ecsctl exec` 能夠進入容器內執行指令的必要插件。
