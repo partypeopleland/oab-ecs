@@ -1,0 +1,32 @@
+# bots.yaml
+# Map bot names to their specific ECS deployment parameters
+# Global AWS environment parameters are now separated into aws-env.yaml (use init-env.sh to generate).
+#
+# 📋 AI-Friendly YAML Schema Definition:
+# <bot_name>:
+#   backend_agent: Agent type name (e.g. 'agy', 'codex') - string
+#   image: Full container image URL (must support x86_64 Fargate) - string
+#   agent_command: Command to launch the agent inside the container (e.g. 'agy-acp') - string
+#   secret_path: Secrets Manager secret path containing DISCORD_BOT_TOKEN (e.g. 'openab/oab-ghost') - string
+#   cpu: CPU units for Fargate task. Must be string (e.g. '256', '512', '1024') - string
+#   memory: Memory size in MB for Fargate task. Must be string (e.g. '512', '1024', '2048') - string
+#   capacity: Fargate capacity provider. 'FARGATE_SPOT' (cost-effective, may be interrupted) or 'FARGATE' (stable, full price) - string
+#   state_bucket: (Optional) Override S3 state bucket. Keep empty '' to use global state_bucket - string
+#   pre_boot_url: HTTPS URL for the pre-boot hook script (typically GitHub Gist Raw URL) - string
+#   pre_boot_sha256: SHA-256 hash of the pre-boot script for security validation - string
+#   pre_shutdown_url: HTTPS URL for the pre-shutdown hook script (typically GitHub Gist Raw URL) - string
+#   pre_shutdown_sha256: SHA-256 hash of the pre-shutdown script for security validation - string
+
+ghost:
+  backend_agent: agy
+  image: ghcr.io/openabdev/openab-antigravity:0.8.5-beta.9
+  agent_command: agy-acp
+  secret_path: openab/oab-ghost
+  cpu: '256'
+  memory: '512'
+  capacity: FARGATE_SPOT
+  state_bucket: ''
+  pre_boot_url: 'https://gist.githubusercontent.com/partypeopleland/54ae44ade600087750dd8faad223d98e/raw/pre-boot.sh'
+  pre_boot_sha256: 'f3898f7b71a02566a0266d1f194d736dbdcb868bc227214def5be4d1b7135235'
+  pre_shutdown_url: 'https://gist.githubusercontent.com/partypeopleland/b68669193b633fafb0f10200cc94813a/raw/pre-shutdown.sh'
+  pre_shutdown_sha256: '66899a5e63b690254a4d7bdba2906413fd5225531f2273a5b5455fa40e87230f'

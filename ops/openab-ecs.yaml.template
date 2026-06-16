@@ -1,0 +1,64 @@
+apiVersion: ecsctl/v1
+kind: Service
+metadata:
+  name: openab-{{name}}
+  cluster: {{cluster}}
+spec:
+  image: {{image}}
+  cpu: '{{cpu}}'
+  memory: '{{memory}}'
+  arch: X86_64
+  capacity: {{capacity}}
+  desiredCount: 1
+  execEnabled: true
+  env:
+    OPENAB_AGENT_COMMAND: {{agent_command}}
+    OPENAB_AGENT_NAME: {{name}}
+    OPENAB_BACKEND_AGENT: {{backend_agent}}
+    STATE_BUCKET: '{{state_bucket}}'
+    AWS_REGION: {{region}}
+    AWS_DEFAULT_REGION: {{region}}
+  secrets: {}
+  logGroup: /ecs/openab-{{name}}
+  executionRoleArn: {{execution_role_arn}}
+  taskRoleArn: {{task_role_arn}}
+  subnets:
+{{subnets}}
+  securityGroups:
+{{security_groups}}
+  assignPublicIp: true
+  containerName: openab-{{name}}
+  port: 0
+  command:
+  - sh
+  - -c
+  - |
+    cat << 'EOF' > /home/agent/config.toml
+    [secrets.refs]
+    discord_bot_token = "aws-sm://{{secret_path}}#DISCORD_BOT_TOKEN"
+
+    [discord]
+    bot_token = "${secrets.discord_bot_token}"
+
+    [agent]
+    command = "{{agent_command}}"
+    working_dir = "/home/agent"
+
+    [pool]
+    max_sessions = 10
+    session_ttl_hours = 24
+
+    [hooks.pre_boot]
+    timeout_seconds = 120
+    on_failure = "abort"
+    url = "{{pre_boot_url}}"
+    sha256 = "{{pre_boot_sha256}}"
+
+    [hooks.pre_shutdown]
+    timeout_seconds = 120
+    on_failure = "abort"
+    url = "{{pre_shutdown_url}}"
+    sha256 = "{{pre_shutdown_sha256}}"
+    EOF
+    exec tini -- openab run -c /home/agent/config.toml
+  containers: null

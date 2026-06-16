@@ -1,0 +1,9 @@
+# aws-defaults.yaml
+# 初始化腳本自動建立 AWS 資源時所使用的預設名稱。
+# 執行 ./init-env.sh 前，您可以修改此處的名稱以達到完全的客製化。
+
+cluster_name: openab-cluster
+execution_role_name: openab-task-execution-role
+task_role_name: openab-task-role
+security_group_name: openab-sg
+state_bucket_name: ''

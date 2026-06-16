@@ -1,0 +1,8 @@
+# Ignore local AWS environment file containing account specific configurations
+aws-env.yaml
+
+# Ignore temporary rendered deployment files
+.deploy-*.yaml
+
+# Ignore local restored states
+restored/
