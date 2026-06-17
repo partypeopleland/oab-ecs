@@ -122,26 +122,6 @@ if [ "$ACTION" = "render" ]; then
   exit 0
 fi
 
-# 檢查 AWS Secrets Manager 密鑰是否存在
-if [ -n "$SECRET_PATH" ] && [ "$SECRET_PATH" != "null" ] && [ "$SECRET_PATH" != "''" ]; then
-  echo "檢查 AWS Secrets Manager 密鑰 '$SECRET_PATH'..."
-  if ! aws secretsmanager describe-secret --secret-id "$SECRET_PATH" --region "$REGION" &>/dev/null; then
-    echo "❌ 錯誤: 找不到 AWS Secrets Manager 密鑰 '$SECRET_PATH'。"
-    echo "在部署前，請先手動建立此密鑰。您可以使用以下 AWS CLI 指令建立："
-    echo ""
-    echo "aws secretsmanager create-secret \\"
-    echo "  --name \"$SECRET_PATH\" \\"
-    echo "  --description \"OpenAB Bot Configuration Secrets for $BOT_NAME\" \\"
-    echo "  --secret-string '{\"DISCORD_BOT_TOKEN\":\"您的_DISCORD_BOT_TOKEN\"}' \\"
-    echo "  --region \"$REGION\""
-    echo ""
-    echo "請建立完成後，再重新執行部署。"
-    exit 1
-  else
-    echo "✓ Secrets Manager 密鑰已存在。"
-  fi
-fi
-
 # 確保 CloudWatch Log Group 存在 (不存在時自動建立)
 LOG_GROUP="/ecs/openab-$BOT_NAME"
 echo "檢查 CloudWatch Log Group '$LOG_GROUP'..."
