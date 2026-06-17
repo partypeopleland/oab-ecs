@@ -39,23 +39,21 @@ ghost:
 ```
 
 ## ⚙️ 機器人專屬人設與狀態同步 (Bot Personality & State)
-當您需要讓特定機器人（如 `ghost`）擁有自己的身份定義（即 `AGENTS.md` 人設檔案）：
+為了解決全域規則與專屬人設混合的問題，我們採用了「規則、人設與工具」分離的機制：
 
-1. **建立專屬人設**：
-   在專案根目錄的本地端 `state/<bot_name>/` 資料夾下，新增 `AGENTS.md`：
+1. **全域協作與維運規則 (AGENTS.md)**：
+   放置於 `state/shared/AGENTS.md`，定義所有 Bot 必須無條件遵循的核心指引（例如：不預設解決方案、先分析步驟等）。此檔案會被強制覆蓋至所有 Bot 的 `/home/agent/AGENTS.md`。
+
+2. **個別 Bot 專屬人設 (Identity.md)**：
+   建立於個別目錄下（例如 `state/ghost/steering/Identity.md`），填入該 Bot 的人格特質。開機時會解壓至容器中的 `/home/agent/steering/Identity.md`。
+
+3. **全域可用工具說明 (TOOLS.md)**：
+   放置於 `state/shared/common/TOOLS.md`，介紹放在 `bin/` 底下的工具功能（如 `aws`, `gh`, `uv`）。開機時會同步至 `/home/agent/TOOLS.md`。
+
+4. **同步狀態至 S3**：
+   任何本地狀態（包含 shared 與專屬人設）修改後，請務必執行 `saveBucket.sh` 同步至 S3：
    ```bash
-   mkdir -p state/ghost
-   touch state/ghost/AGENTS.md
-   ```
-   您可以在此檔案的頂端寫入該 Bot 的專屬角色人設（如姓名、個性、職責等），並在下方附上全域協作規則。
-
-2. **注意全域共用檔衝突**：
-   為了避免專屬人設在容器啟動時被全域預設檔案覆蓋，**請勿**在 `state/shared/` 目錄下放置 `AGENTS.md`。如果 S3 的 `shared/AGENTS.md` 已存在，應手動從 S3 中刪除。
-
-3. **同步狀態至 S3**：
-   撰寫完專屬設定後，必須執行 `saveBucket.sh` 將狀態推送打包上傳至 S3，以便開機載入：
-   ```bash
-   ops/saveBucket.sh ghost
+   ops/saveBucket.sh <bot_name>
    ```
 
 ---

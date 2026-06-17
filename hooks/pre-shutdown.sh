@@ -13,13 +13,20 @@ if [ -n "$STATE_BUCKET" ]; then
   tar -czf /tmp/home-backup.tar.gz -C "$HOME" \
     --exclude="./aws-cli" \
     --exclude="./bin/aws" \
+    --exclude="./.cache" \
+    --exclude="./.npm" \
+    --exclude="./node_modules" \
+    --exclude="./.rustup" \
+    --exclude="./.cargo" \
+    --exclude="./.local/share/uv/cache" \
+    --exclude="./.local/aws-cli" \
     --exclude="./.openab/logs" \
     --exclude="./.openab/tmp" \
     --exclude="./tmp" \
-    .
+    . 2>/dev/null || [ $? -le 2 ]
   
   # 上傳至 S3
-  aws s3 cp /tmp/home-backup.tar.gz "s3://$STATE_BUCKET/$OPENAB_AGENT_NAME-home.tar.gz" --quiet
+  aws s3 cp /tmp/home-backup.tar.gz "s3://$STATE_BUCKET/$OPENAB_AGENT_NAME-home.tar.gz" --quiet || true
   rm -f /tmp/home-backup.tar.gz
   echo "✓ 備份完成！"
 fi

@@ -27,6 +27,6 @@ ghost:
   capacity: FARGATE_SPOT
   state_bucket: ''
   pre_boot_url: 'https://gist.githubusercontent.com/partypeopleland/54ae44ade600087750dd8faad223d98e/raw/pre-boot.sh'
-  pre_boot_sha256: 'f3898f7b71a02566a0266d1f194d736dbdcb868bc227214def5be4d1b7135235'
+  pre_boot_sha256: '17da8ee711453dfcafef3475ee47306014f5d96cb2de523493cb8ab290096084'
   pre_shutdown_url: 'https://gist.githubusercontent.com/partypeopleland/b68669193b633fafb0f10200cc94813a/raw/pre-shutdown.sh'
-  pre_shutdown_sha256: '66899a5e63b690254a4d7bdba2906413fd5225531f2273a5b5455fa40e87230f'
+  pre_shutdown_sha256: 'f78d19a30fe5e0274c850ee14975a2fa7c50351517ad83c16c45df7d3367764d'

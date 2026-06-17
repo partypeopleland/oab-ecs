@@ -11,7 +11,7 @@
 3. **IAM Task Role** (預設: `openab-task-role`)
 4. **Security Group** (預設: `openab-sg`)
 5. **Subnets** (至少 2 個與 Security Group 同個 VPC 的子網路)
-6. **S3 State Bucket** (用於存放 Bot 狀態備份與 AWS CLI 快取)
+6. **S3 State Bucket** (用於存放 Bot 狀態備份與 uv 工具快取)
 
 ---
 
@@ -40,7 +40,7 @@ yq --version
      ops/aws-init.sh
      ```
   3. 該腳本會檢查並自動建立上述所有缺失的 AWS 資源（冪等操作，已存在則跳過），並自動生成本地的 `aws-env.yaml`。
-  4. 同時會將 AWS CLI 安裝包快取至 S3，加速後續容器啟動。
+  4. 同時會將 uv 下載包快取至 S3，加速後續容器啟動。
 
 ---
 
@@ -64,5 +64,6 @@ security_groups: |
 
 ---
 
-## 🔄 AWS CLI S3 快取
-`aws-init.sh` 會在建立 S3 Bucket 後，自動將 AWS CLI 安裝包上傳至 S3 快取路徑 `cache/awscli-linux-x86_64.zip`。容器啟動時，`pre-boot.sh` 會優先從 S3 快取下載，避免每次都從官方下載，大幅縮短啟動時間。
+## 🔄 uv 工具快取機制
+容器啟動時，`pre-boot.sh` 會優先自 S3 快取路徑 `cache/uv-x86_64-unknown-linux-musl.tar.gz` 複製並安裝 `uv`，若快取不存在則從 GitHub 官方下載並寫入快取，以加速後續容器的啟動。
+*(註：AWS CLI 安裝包為避免 cold start 時的複雜認證問題，改為每次直接自官方外網下載。)*

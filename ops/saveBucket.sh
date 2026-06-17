@@ -59,7 +59,7 @@ fi
 echo "正在同步本地 state 目錄至 S3 Bucket '$STATE_BUCKET'..."
 if [ -d "$SCRIPT_DIR/../state/shared" ]; then
   echo "同步共享資源..."
-  aws s3 sync "$SCRIPT_DIR/../state/shared/" "s3://$STATE_BUCKET/shared/" --quiet
+  aws s3 sync "$SCRIPT_DIR/../state/shared/" "s3://$STATE_BUCKET/shared/" --delete --quiet
 fi
 
 if [ -d "$SCRIPT_DIR/../state/$BOT_NAME" ]; then

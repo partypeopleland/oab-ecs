@@ -63,6 +63,29 @@
 
 ## 🛠️ 運作機制
 
+### 架構圖 (Architecture)
+
+```text
+                     +------------------+
+                     | Local Developer  |
+                     +--------+---------+
+                              | 1. ecsctl apply
+                              v
+                   +--------------------+
+     +-------------+  AWS ECS Fargate   +-------------+
+     |             | (OpenAB Container) |             |
+     |             +--------+-----------+             |
+     |                      |                         |
+     | 2. Get Token         | 3. Sync State           | 4. Write Logs
+     | (via Task Role)      | (via Task Role)         |
+     v                      v                         v
++-----------+          +-----------+          +---------------+
+|    AWS    |          |   AWS     |          |      AWS      |
+|  Secrets  |          |    S3     |          |  CloudWatch   |
+|  Manager  |          |  Bucket   |          |     Logs      |
++-----------+          +-----------+          +---------------+
+```
+
 ### 1. 設定檔分離機制
 我們將設定分為兩個檔案，以實現環境與實例的解耦：
 * **[bots.yaml](./ops/bots.yaml)**：僅包含機器人專屬的配置（如 image、secret_path、capacity 等），可安全地提交至 Git。
@@ -95,24 +118,26 @@ ghost:
 * 整合了 `pre_boot` 與 `pre_shutdown` 鉤子，在容器啟動前載入檔案，並在容器關閉前自動備份到 S3。
 
 ### 3. 狀態與人設管理機制 (S3 State & Layering)
-當 Bot 容器啟動時，會執行開機鉤子 (`pre-boot.sh`) 來還原與同步狀態。其載入機制採用以下三層優先順序覆蓋：
+當 Bot 容器啟動時，會執行開機鉤子 (`pre-boot.sh`) 來還原與同步狀態。其載入機制採用以下分層優先順序：
 
 1. **Layer 1：還原 Bot 專屬資料** (下載並解壓 `s3://<bucket>/<bot_name>-home.tar.gz`)
-   * 還原特定機器人的專屬檔案與狀態。例如，如果您在 `state/<bot_name>/` 下放置了專屬的 `AGENTS.md` 人設檔案，它會在第一階段被載入。
-2. **Layer 2：覆蓋後端共用資料** (從 `s3://<bucket>/shared/<backend_agent>/` 同步)
-   * 覆蓋相同後端類型（例如 `agy`）機器人共用的技能（skills）、設定等檔案。
-3. **Layer 3：覆蓋全域共用資料** (下載 `s3://<bucket>/shared/AGENTS.md`)
-   * 若 S3 的 `shared/AGENTS.md` 存在，則會覆蓋前兩步的 `AGENTS.md`。
+   * 還原特定機器人的專屬檔案與狀態，包括放在 `steering/Identity.md` 的專屬人設檔案。
+2. **Layer 2.1：覆蓋全域共用資料** (從 `s3://<bucket>/shared/common/` 同步)
+   * 載入所有 Bot 共用的通用資源，如可用工具清單說明檔 `TOOLS.md`。
+3. **Layer 2.2：覆蓋後端共用資料** (從 `s3://<bucket>/shared/<backend_agent>/` 同步)
+   * 覆蓋相同後端類型（例如 `agy`）機器人共用的技能（skills）、設定檔等。
+4. **Layer 3：覆蓋全域維運規則檔** (下載 `s3://<bucket>/shared/AGENTS.md`)
+   * 強制寫入最新的全域協作與維運規則，此檔案會動態指引 Bot 閱讀本地的專屬人設與工具清單。
 
-#### 📌 如何設定「專屬人設」與「全域共用規則」？
-* **希望所有 Bot 共用相同的人設/規則**：
-  * 請將 `AGENTS.md` 放在 `state/shared/AGENTS.md`，它會自動發佈到 S3 的 `shared/AGENTS.md`，並強制套用到所有 Bot。
-* **希望各個 Bot 擁有獨立人設**：
-  * **切勿**放置全域共用檔 `state/shared/AGENTS.md`（必須確保 S3 的 `shared/AGENTS.md` 為空/不存在）。
-  * 請將各自的 `AGENTS.md` 放在各自的目錄下（例如 `state/ghost/AGENTS.md`），這樣開機時就會抓取各自專屬的人設。
+#### 📌 如何設定「專屬人設」與「工具說明」？
+* **全域共用維運規則**：請編輯 `state/shared/AGENTS.md`，定義 Agent 的維運底線與核心協作規則。
+* **個別 Bot 專屬人設**：請建立於各自的專屬目錄下（例如 `state/ghost/steering/Identity.md`），填入專屬角色人格（如：我的名字是 Ghost）。
+* **共用工具說明**：請編輯 `state/shared/common/TOOLS.md`，記錄部署在 `/home/agent/bin/` 底下的工具（如 `aws`, `gh`, `uv`）的詳細功能。
 
-### 4. AWS CLI S3 快取機制
-為了加速容器啟動，`aws-init.sh` 會在初始化時將 AWS CLI 安裝包上傳至 S3 快取。`pre-boot.sh` 啟動時會優先從 S3 快取下載，若快取不存在才從官方下載。
+### 4. 工具快取與下載機制
+為了加速容器啟動並確保冷啟動時的認證穩定性：
+* **`uv` (Python 包管理器)**：優先從 S3 快取路徑 `cache/uv-x86_64-unknown-linux-musl.tar.gz` 獲取，若不存在則自 GitHub 下載並上傳快取，大幅縮短啟動時間。
+* **`aws` (AWS CLI)**：每次容器啟動時，直接自 AWS 官方外網下載並解壓縮安裝，確保免去 cold start 時 S3 預簽章或角色憑證過期等認證干擾。
 
 ---
 

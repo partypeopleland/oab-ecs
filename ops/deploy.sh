@@ -91,9 +91,20 @@ sed -i "s@{{memory}}@$MEMORY@g" "$TEMP_FILE"
 sed -i "s@{{capacity}}@$CAPACITY@g" "$TEMP_FILE"
 sed -i "s@{{state_bucket}}@$STATE_BUCKET@g" "$TEMP_FILE"
 sed -i "s@{{region}}@$REGION@g" "$TEMP_FILE"
-sed -i "s@{{pre_boot_url}}@$PRE_BOOT_URL@g" "$TEMP_FILE"
+# 加上時間戳以破除 Gist CDN 快取
+PRE_BOOT_URL_FRESH="$PRE_BOOT_URL"
+if [[ "$PRE_BOOT_URL" == *"gist.githubusercontent.com"* ]]; then
+  PRE_BOOT_URL_FRESH="${PRE_BOOT_URL}?t=$(date +%s)"
+fi
+
+PRE_SHUTDOWN_URL_FRESH="$PRE_SHUTDOWN_URL"
+if [[ "$PRE_SHUTDOWN_URL" == *"gist.githubusercontent.com"* ]]; then
+  PRE_SHUTDOWN_URL_FRESH="${PRE_SHUTDOWN_URL}?t=$(date +%s)"
+fi
+
+sed -i "s@{{pre_boot_url}}@$PRE_BOOT_URL_FRESH@g" "$TEMP_FILE"
 sed -i "s@{{pre_boot_sha256}}@$PRE_BOOT_SHA256@g" "$TEMP_FILE"
-sed -i "s@{{pre_shutdown_url}}@$PRE_SHUTDOWN_URL@g" "$TEMP_FILE"
+sed -i "s@{{pre_shutdown_url}}@$PRE_SHUTDOWN_URL_FRESH@g" "$TEMP_FILE"
 sed -i "s@{{pre_shutdown_sha256}}@$PRE_SHUTDOWN_SHA256@g" "$TEMP_FILE"
 sed -i "s@{{cluster}}@$CLUSTER@g" "$TEMP_FILE"
 sed -i "s@{{execution_role_arn}}@$EXECUTION_ROLE_ARN@g" "$TEMP_FILE"
@@ -109,6 +120,26 @@ echo "✓ 已成功渲染部署設定檔至: $TEMP_FILE"
 if [ "$ACTION" = "render" ]; then
   echo "操作設定為 'render'。已跳過部署步驟。"
   exit 0
+fi
+
+# 檢查 AWS Secrets Manager 密鑰是否存在
+if [ -n "$SECRET_PATH" ] && [ "$SECRET_PATH" != "null" ] && [ "$SECRET_PATH" != "''" ]; then
+  echo "檢查 AWS Secrets Manager 密鑰 '$SECRET_PATH'..."
+  if ! aws secretsmanager describe-secret --secret-id "$SECRET_PATH" --region "$REGION" &>/dev/null; then
+    echo "❌ 錯誤: 找不到 AWS Secrets Manager 密鑰 '$SECRET_PATH'。"
+    echo "在部署前，請先手動建立此密鑰。您可以使用以下 AWS CLI 指令建立："
+    echo ""
+    echo "aws secretsmanager create-secret \\"
+    echo "  --name \"$SECRET_PATH\" \\"
+    echo "  --description \"OpenAB Bot Configuration Secrets for $BOT_NAME\" \\"
+    echo "  --secret-string '{\"DISCORD_BOT_TOKEN\":\"您的_DISCORD_BOT_TOKEN\"}' \\"
+    echo "  --region \"$REGION\""
+    echo ""
+    echo "請建立完成後，再重新執行部署。"
+    exit 1
+  else
+    echo "✓ Secrets Manager 密鑰已存在。"
+  fi
 fi
 
 # 確保 CloudWatch Log Group 存在 (不存在時自動建立)
