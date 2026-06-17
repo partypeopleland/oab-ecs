@@ -41,6 +41,7 @@
   * [aws_infrastructure.md](./docs/aws_infrastructure.md) - AWS 基礎架構初始化指南
   * [aws_secrets_manager.md](./docs/aws_secrets_manager.md) - AWS Secrets Manager 密鑰管理指南
   * [deployment.md](./docs/deployment.md) - 機器人部署指南
+  * [hooks_gist_sync.md](./docs/hooks_gist_sync.md) - hook 腳本與 gist 同步規範
   * [observability.md](./docs/observability.md) - 監控、日誌與容器偵錯指南
 * [hooks/](./hooks) - 容器啟動與關閉的鉤子腳本目錄，包含 [pre-boot.sh](./hooks/pre-boot.sh) 與 [pre-shutdown.sh](./hooks/pre-shutdown.sh)
 * [state/](./state) - 本地機器人狀態與人設範本目錄 (包含專屬與共用配置)
@@ -55,6 +56,7 @@
   * [saveBucket.sh](./ops/saveBucket.sh) - 手動同步本地狀態至 S3 (Bash)
   * [restoreBucket.sh](./ops/restoreBucket.sh) - 從 S3 下載與還原狀態至本地新路徑 (Bash)
   * [status.sh](./ops/status.sh) - 查詢特定 Bot 的 ECS 服務狀態、任務詳情與最新日誌 (Bash)
+  * [sync-hook-gists.sh](./ops/sync-hook-gists.sh) - 將 `hooks/` 目錄中的 hook 腳本同步到 GitHub gist，並刷新 `bots.yaml` 的 SHA-256
   * [test-deploy.sh](./ops/test-deploy.sh) - 自動化部署腳本的單元測試 (Bash)
   * `aws-env.yaml` - (Git 忽略) 自動生成的本地 AWS 環境與網路設定檔案
 * `restored/` - (Git 忽略) 本地測試下載還原之機器人狀態暫存目錄

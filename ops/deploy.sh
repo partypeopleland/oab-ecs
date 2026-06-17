@@ -66,10 +66,15 @@ CPU=$(yq eval ".$BOT_NAME.cpu" "$BOTS_FILE")
 MEMORY=$(yq eval ".$BOT_NAME.memory" "$BOTS_FILE")
 CAPACITY=$(yq eval ".$BOT_NAME.capacity" "$BOTS_FILE")
 STATE_BUCKET=$(yq eval ".$BOT_NAME.state_bucket" "$BOTS_FILE")
+AGENT_ARGS=$(yq eval ".$BOT_NAME.agent_args" "$BOTS_FILE")
 
 # state_bucket: bot 專屬 > 全域
 if [ -z "$STATE_BUCKET" ] || [ "$STATE_BUCKET" = "null" ] || [ "$STATE_BUCKET" = "''" ]; then
   STATE_BUCKET="$STATE_BUCKET_GLOBAL"
+fi
+
+if [ -z "$AGENT_ARGS" ] || [ "$AGENT_ARGS" = "null" ] || [ "$AGENT_ARGS" = "''" ]; then
+  AGENT_ARGS="[]"
 fi
 
 PRE_BOOT_URL=$(yq eval ".$BOT_NAME.pre_boot_url" "$BOTS_FILE")
@@ -85,6 +90,7 @@ sed -i "s@{{name}}@$BOT_NAME@g" "$TEMP_FILE"
 sed -i "s@{{backend_agent}}@$BACKEND_AGENT@g" "$TEMP_FILE"
 sed -i "s@{{image}}@$IMAGE@g" "$TEMP_FILE"
 sed -i "s@{{agent_command}}@$AGENT_COMMAND@g" "$TEMP_FILE"
+sed -i "s@{{agent_args}}@$AGENT_ARGS@g" "$TEMP_FILE"
 sed -i "s@{{secret_path}}@$SECRET_PATH@g" "$TEMP_FILE"
 sed -i "s@{{cpu}}@$CPU@g" "$TEMP_FILE"
 sed -i "s@{{memory}}@$MEMORY@g" "$TEMP_FILE"

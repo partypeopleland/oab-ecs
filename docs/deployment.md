@@ -17,6 +17,7 @@
 2. **[openab-ecs.yaml.template](../ops/openab-ecs.yaml.template)**：通用服務模板。
 3. **[deploy.sh](../ops/deploy.sh)**：自動化渲染與部署腳本（使用 yq 解析 YAML）。
 4. **[validate.sh](../ops/validate.sh)**：部署前驗證腳本。
+5. **[sync-hook-gists.sh](../ops/sync-hook-gists.sh)**：將 `hooks/` 中的 hook 腳本同步到 `bots.yaml` 設定的 gist，並刷新 SHA-256。
 
 ---
 
@@ -37,6 +38,10 @@ ghost:
   pre_shutdown_url: 'https://gist.githubusercontent.com/...' # pre-shutdown 鉤子腳本網址
   pre_shutdown_sha256: '66899a5e...'           # 腳本的 SHA-256 雜湊值
 ```
+
+> [!IMPORTANT]
+> `pre_boot_url` / `pre_shutdown_url` 在 deploy 時實際下載的是遠端 gist，不是 repo 內的 `hooks/*.sh`。
+> 因此修改 [hooks/pre-boot.sh](../hooks/pre-boot.sh) 或 [hooks/pre-shutdown.sh](../hooks/pre-shutdown.sh) 後，必須先執行 `ops/sync-hook-gists.sh`，讓 gist 內容與 `bots.yaml` 的 SHA-256 一起更新。完整規範請見 [hooks_gist_sync.md](./hooks_gist_sync.md)。
 
 ## ⚙️ 機器人專屬人設與狀態同步 (Bot Personality & State)
 為了解決全域規則與專屬人設混合的問題，我們採用了「規則、人設與工具」分離的機制：

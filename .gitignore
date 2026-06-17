@@ -6,3 +6,7 @@ aws-env.yaml
 
 # Ignore local restored states
 restored/
+
+# Ignore large local binaries in backend shared assets
+state/shared/native-kiro/bin/kiro-cli
+state/shared/native-kiro/bin/kiro-cli-chat

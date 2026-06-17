@@ -42,6 +42,7 @@ spec:
 
     [agent]
     command = "{{agent_command}}"
+    args = {{agent_args}}
     working_dir = "/home/agent"
 
     [pool]
@@ -60,5 +61,6 @@ spec:
     url = "{{pre_shutdown_url}}"
     sha256 = "{{pre_shutdown_sha256}}"
     EOF
+    export PATH="/home/agent/bin:$PATH"
     exec tini -- openab run -c /home/agent/config.toml
   containers: null

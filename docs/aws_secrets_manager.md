@@ -7,7 +7,26 @@
 ## 🔒 Secrets Manager 密鑰生命週期 (CRUD)
 
 ### 1. 建立密鑰 (Create)
-若特定 Bot 的密鑰路徑（如 `openab/oab-ghost`）在 AWS 中不存在，AI Agent 應建立它：
+若特定 Bot 的密鑰路徑（如 `openab/oab-ghost`）在 AWS 中不存在，AI Agent 或開發人員應建立它。我們提供了兩種建立方式：
+
+#### 🛠️ 方法 A：使用自動化建立腳本 (推薦)
+專案中提供了一個便捷的自動化 Bash 腳本 [ops/create-secret.sh](file:///home/art/oab-ecs/ops/create-secret.sh)。它會自動讀取 [ops/aws-env.yaml](file:///home/art/oab-ecs/ops/aws-env.yaml) 中的 AWS Region 設定，並自動將密鑰名稱格式化為 `openab/oab-<bot_name>`。
+
+**使用指令：**
+```bash
+ops/create-secret.sh <bot名稱> <DISCORD_BOT_TOKEN>
+```
+
+* **參數說明**：
+  * `<bot名稱>`：Bot 的名稱（例如 `spirit` 或 `ghost`），腳本會將其自動串接為 `openab/oab-<bot名稱>`。
+  * `<DISCORD_BOT_TOKEN>`：該 Bot 實際使用的 Discord Bot Token。
+* **使用範例**：
+  ```bash
+  ops/create-secret.sh spirit MTIzNDU2Nzg5...
+  ```
+
+#### 💻 方法 B：手動使用 AWS CLI 指令
+您也可以手動執行 AWS CLI 指令來建立密鑰：
 ```bash
 aws secretsmanager create-secret \
   --name "openab/oab-ghost" \
