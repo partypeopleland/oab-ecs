@@ -1,0 +1,4 @@
+ghost:
+  state_bucket: ghost-specific-bucket
+spirit:
+  state_bucket: ''
