@@ -88,7 +88,8 @@ cat ops/aws-env.yaml
 應包含 `cluster`、`region`、`subnets`、`security_groups` 等欄位。
 
 ### Step 3. 驗證 Secrets
-確保 `bots.yaml` 中設定的 `secret_path` 在 AWS 中已建立且寫入了 `DISCORD_BOT_TOKEN`。
+確保 `bots.yaml` 中設定的 `secret_path` 在 AWS 中已建立且寫入了 `DISCORD_BOT_TOKEN`。若 agent 需要使用 `gh`，可在同一個 Secret 內額外加入 `GH_TOKEN`；沒有設定也不會阻止服務啟動。
+若使用可選的 `GH_TOKEN` 輔助腳本，請先確認 `state/shared/common/.openab/get-optional-gh-token.sh` 已經透過 `ops/saveBucket.sh <bot_name>` 同步到 S3，否則容器首次啟動時不會拿到這個共用檔案。
 
 ### Step 4. 執行部署
 ```bash

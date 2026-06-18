@@ -27,7 +27,7 @@ ghost:
   capacity: FARGATE_SPOT
   state_bucket: ''
   pre_boot_url: 'https://gist.githubusercontent.com/partypeopleland/54ae44ade600087750dd8faad223d98e/raw/pre-boot.sh'
-  pre_boot_sha256: '6591394e49f1dad0c0d8fd80b68fdc65595d6ed93323240105de424eb9072856'
+  pre_boot_sha256: 'cae626e4e2a69056f51f268ee5d9ddbad4a608782e57ca5fb9988512304fd153'
   pre_shutdown_url: 'https://gist.githubusercontent.com/partypeopleland/b68669193b633fafb0f10200cc94813a/raw/pre-shutdown.sh'
   pre_shutdown_sha256: 'a52b3380effd42181374b63538949ab6dbcdb03a56fd0cca1ae7c731fe59cc01'
 spirit:
@@ -41,6 +41,6 @@ spirit:
   capacity: FARGATE_SPOT
   state_bucket: ''
   pre_boot_url: 'https://gist.githubusercontent.com/partypeopleland/54ae44ade600087750dd8faad223d98e/raw/pre-boot.sh'
-  pre_boot_sha256: '6591394e49f1dad0c0d8fd80b68fdc65595d6ed93323240105de424eb9072856'
+  pre_boot_sha256: 'cae626e4e2a69056f51f268ee5d9ddbad4a608782e57ca5fb9988512304fd153'
   pre_shutdown_url: 'https://gist.githubusercontent.com/partypeopleland/b68669193b633fafb0f10200cc94813a/raw/pre-shutdown.sh'
   pre_shutdown_sha256: 'a52b3380effd42181374b63538949ab6dbcdb03a56fd0cca1ae7c731fe59cc01'

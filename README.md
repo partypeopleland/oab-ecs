@@ -239,7 +239,7 @@ ops/test-deploy.sh
 ## 🚀 新增一個 Bot 的步驟
 
 1. **設定 AWS Secrets Manager**：
-   在 AWS 建立對應的密鑰（例如 `openab/oab-codex`），並寫入 `DISCORD_BOT_TOKEN`。可參考 [AWS Secrets Manager 密鑰管理指南](./docs/aws_secrets_manager.md)。
+   在 AWS 建立對應的密鑰（例如 `openab/oab-codex`），至少寫入 `DISCORD_BOT_TOKEN`；若 agent 需要使用 `gh`，同一個 Secret 內再加入 `GH_TOKEN`。可參考 [AWS Secrets Manager 密鑰管理指南](./docs/aws_secrets_manager.md)。
    
 2. **在 `bots.yaml` 新增設定**：
    在 [bots.yaml](./ops/bots.yaml) 中加入新 Bot 的實體參數。必須包含以下欄位：

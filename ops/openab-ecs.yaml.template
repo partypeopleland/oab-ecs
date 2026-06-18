@@ -36,6 +36,7 @@ spec:
     cat << 'EOF' > /home/agent/config.toml
     [secrets.refs]
     discord_bot_token = "aws-sm://{{secret_path}}#DISCORD_BOT_TOKEN"
+    gh_token = "exec:///home/agent/.openab/get-optional-gh-token.sh {{secret_path}}"
 
     [discord]
     bot_token = "${secrets.discord_bot_token}"
@@ -44,6 +45,7 @@ spec:
     command = "{{agent_command}}"
     args = {{agent_args}}
     working_dir = "/home/agent"
+    env = { GH_TOKEN = "${secrets.gh_token}" }
 
     [pool]
     max_sessions = 10

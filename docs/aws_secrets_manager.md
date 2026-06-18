@@ -1,6 +1,6 @@
 # AWS Secrets Manager 密鑰管理指南 (AWS Secrets Manager)
 
-本文件指引 AI Agent 如何建立、讀取、更新、刪除 OpenAB 機器人所需的敏感密鑰（如 `DISCORD_BOT_TOKEN`），並完成權限檢驗。
+本文件指引 AI Agent 如何建立、讀取、更新、刪除 OpenAB 機器人所需的敏感密鑰（如 `DISCORD_BOT_TOKEN`、`GH_TOKEN`），並完成權限檢驗。
 
 ---
 
@@ -31,7 +31,7 @@ ops/create-secret.sh <bot名稱> <DISCORD_BOT_TOKEN>
 aws secretsmanager create-secret \
   --name "openab/oab-ghost" \
   --description "OpenAB Bot Configuration Secrets for ghost" \
-  --secret-string '{"DISCORD_BOT_TOKEN":"your_real_discord_bot_token_here"}' \
+  --secret-string '{"DISCORD_BOT_TOKEN":"your_real_discord_bot_token_here","GH_TOKEN":"ghp_your_real_github_token_here"}' \
   --region us-east-1
 ```
 
@@ -40,14 +40,14 @@ aws secretsmanager create-secret \
 ```bash
 aws secretsmanager get-secret-value --secret-id "openab/oab-ghost" --region us-east-1
 ```
-* **AI 處理**：解析輸出 JSON 中的 `SecretString`，以 JSON 解析取得物件並讀取其中的 `DISCORD_BOT_TOKEN`。
+* **AI 處理**：解析輸出 JSON 中的 `SecretString`，以 JSON 解析取得物件並讀取其中所需欄位，例如 `DISCORD_BOT_TOKEN` 與 `GH_TOKEN`。
 
 ### 3. 更新密鑰 (Update)
 更新密鑰欄位時，應先執行 `Read` 取得當前完整 JSON，合併更新欄位後，再整份寫回，避免覆寫其他共存的 Key：
 ```bash
 aws secretsmanager put-secret-value \
   --secret-id "openab/oab-ghost" \
-  --secret-string '{"DISCORD_BOT_TOKEN":"new_discord_bot_token_here"}' \
+  --secret-string '{"DISCORD_BOT_TOKEN":"new_discord_bot_token_here","GH_TOKEN":"ghp_new_github_token_here"}' \
   --region us-east-1
 ```
 
@@ -81,8 +81,15 @@ Fargate 容器是在運行時直接向 AWS 請求解密。AI Agent 應審查 `op
 ```toml
 [secrets.refs]
 discord_bot_token = "aws-sm://{{secret_path}}#DISCORD_BOT_TOKEN"
+gh_token = "exec:///home/agent/.openab/get-optional-gh-token.sh {{secret_path}}"
 
 [discord]
 bot_token = "${secrets.discord_bot_token}"
+
+[agent]
+env = { GH_TOKEN = "${secrets.gh_token}" }
 ```
 * **變數對照**：`{{secret_path}}` 將會被替換為 Bot 的密鑰路徑（如 `openab/oab-ghost`）。
+* **用途說明**：`GH_TOKEN` 會透過 `[agent].env` 傳給 agent subprocess，供容器內的 `gh` 直接使用。
+* **可選行為**：`DISCORD_BOT_TOKEN` 仍是必填；`GH_TOKEN` 會由輔助腳本在 `pre_boot` 完成後嘗試從同一個 Secret 讀取。若不存在、讀取失敗或沒有權限，會回傳空字串並略過，不會阻止 OpenAB 啟動。
+* **腳本位置**：輔助腳本應放在 `state/shared/common/.openab/get-optional-gh-token.sh`，並先用 `ops/saveBucket.sh <bot_name>` 同步到 S3，讓 `pre_boot` 還原到容器內的 `/home/agent/.openab/get-optional-gh-token.sh`。

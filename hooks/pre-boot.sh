@@ -56,3 +56,6 @@ fi
 chmod +x "$HOME/bin/"* 2>/dev/null || true
 chmod +x "$HOME/bin/ghp" 2>/dev/null || true
 ln -sf "$HOME/bin/ghp" "$HOME/bin/gh" 2>/dev/null || true
+
+# Shared helper scripts restored from S3 may lose executable bits.
+chmod +x "$HOME/.openab/"*.sh 2>/dev/null || true
