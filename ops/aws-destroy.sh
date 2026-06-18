@@ -108,10 +108,10 @@ echo ""
 echo "[3/4] S3 狀態清理..."
 if [ "$PURGE_STATE" = true ] && [ -n "$STATE_BUCKET" ] && [ "$STATE_BUCKET" != "null" ]; then
   echo "正在刪除 S3 狀態備份..."
-  # 刪除 bot 專屬 tarball
-  aws s3 rm "s3://$STATE_BUCKET/$BOT_NAME-home.tar.gz" 2>/dev/null && echo "✓ 已刪除 s3://$STATE_BUCKET/$BOT_NAME-home.tar.gz" || echo "ℹ️ Bot tarball 不存在。"
-  # 刪除 bot 專屬 shared 目錄 (如果存在)
-  aws s3 rm "s3://$STATE_BUCKET/shared/$BOT_NAME/" --recursive 2>/dev/null && echo "✓ 已刪除 s3://$STATE_BUCKET/shared/$BOT_NAME/" || true
+  aws s3 rm "s3://$STATE_BUCKET/runtime/$BOT_NAME/home.tar.gz" 2>/dev/null && echo "✓ 已刪除 s3://$STATE_BUCKET/runtime/$BOT_NAME/home.tar.gz" || echo "ℹ️ Runtime tarball 不存在。"
+  aws s3 rm "s3://$STATE_BUCKET/$BOT_NAME-home.tar.gz" 2>/dev/null && echo "✓ 已刪除舊版 key s3://$STATE_BUCKET/$BOT_NAME-home.tar.gz" || true
+  aws s3 rm "s3://$STATE_BUCKET/layers/4-bot/$BOT_NAME/" --recursive 2>/dev/null && echo "✓ 已刪除 s3://$STATE_BUCKET/layers/4-bot/$BOT_NAME/" || true
+  aws s3 rm "s3://$STATE_BUCKET/shared/$BOT_NAME/" --recursive 2>/dev/null && echo "✓ 已刪除舊版 shared key s3://$STATE_BUCKET/shared/$BOT_NAME/" || true
 else
   echo "ℹ️ 跳過 S3 狀態清理。"
 fi

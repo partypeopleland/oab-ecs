@@ -6,50 +6,89 @@ HOME="${HOME:-/home/agent}"
 export HOME
 export AWS_PAGER=""
 
-# Download and install AWS CLI from official source
-echo "從官方下載 AWS CLI..."
-curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscli.zip
-unzip -qo /tmp/awscli.zip -d /tmp
-/tmp/aws/install --bin-dir "$HOME/bin" --install-dir "$HOME/aws-cli" --update
-rm -rf /tmp/awscli.zip /tmp/aws
+AWSCLI_VERSION="2.35.7"
+UV_VERSION="0.11.21"
+AWSCLI_ARCHIVE="awscli-exe-linux-x86_64-${AWSCLI_VERSION}.zip"
+AWSCLI_URL="https://awscli.amazonaws.com/${AWSCLI_ARCHIVE}"
+UV_ARCHIVE="uv-x86_64-unknown-linux-musl.tar.gz"
+UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_ARCHIVE}"
+UV_SHA_URL="${UV_URL}.sha256"
+
+mkdir -p "$HOME/bin"
+
+download_awscli() {
+  echo "從官方下載 AWS CLI ${AWSCLI_VERSION}..."
+  curl -fsSL "$AWSCLI_URL" -o /tmp/awscli.zip
+  unzip -qo /tmp/awscli.zip -d /tmp
+  /tmp/aws/install --bin-dir "$HOME/bin" --install-dir "$HOME/aws-cli" --update
+  rm -rf /tmp/awscli.zip /tmp/aws
+}
+
+download_uv() {
+  echo "從官方下載 uv ${UV_VERSION}..."
+  curl -fsSL "$UV_URL" -o /tmp/uv.tar.gz
+  curl -fsSL "$UV_SHA_URL" -o /tmp/uv.tar.gz.sha256
+
+  UV_SHA256="$(awk '{print $1}' /tmp/uv.tar.gz.sha256)"
+  printf '%s  %s\n' "$UV_SHA256" "/tmp/uv.tar.gz" | sha256sum -c -
+
+  tar -xzf /tmp/uv.tar.gz -C /tmp
+  mv /tmp/uv-x86_64-unknown-linux-musl/uv "$HOME/bin/uv"
+  chmod +x "$HOME/bin/uv"
+  rm -rf /tmp/uv.tar.gz.sha256 /tmp/uv-x86_64-unknown-linux-musl
+}
+
+# Download and install AWS CLI from a pinned official release.
+download_awscli
 export PATH="$HOME/bin:$PATH"
 AWS_BIN="$HOME/bin/aws"
+RUNTIME_KEY="runtime/$OPENAB_AGENT_NAME/home.tar.gz"
+LEGACY_RUNTIME_KEY="$OPENAB_AGENT_NAME-home.tar.gz"
 
-# Try S3 cache first for uv, upload cache if missing
-UV_CACHE_KEY="cache/uv-x86_64-unknown-linux-musl.tar.gz"
+# Try S3 cache first for uv, upload cache if missing.
+UV_CACHE_KEY="cache/uv-${UV_VERSION}-x86_64-unknown-linux-musl.tar.gz"
 if [ -n "$STATE_BUCKET" ] && "$AWS_BIN" --no-cli-pager s3 cp "s3://$STATE_BUCKET/$UV_CACHE_KEY" /tmp/uv.tar.gz --quiet 2>/dev/null; then
   echo "✓ 從 S3 快取載入 uv"
+  tar -xzf /tmp/uv.tar.gz -C /tmp
+  mv /tmp/uv-x86_64-unknown-linux-musl/uv "$HOME/bin/uv"
+  chmod +x "$HOME/bin/uv"
+  rm -rf /tmp/uv.tar.gz /tmp/uv-x86_64-unknown-linux-musl
 else
-  echo "⚠️ S3 快取不存在，從官方下載 uv 並快取至 S3..."
-  curl -sSL "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-musl.tar.gz" -o /tmp/uv.tar.gz
+  echo "⚠️ S3 快取不存在，從官方下載 uv ${UV_VERSION} 並快取至 S3..."
+  download_uv
   if [ -n "$STATE_BUCKET" ]; then
     "$AWS_BIN" --no-cli-pager s3 cp /tmp/uv.tar.gz "s3://$STATE_BUCKET/$UV_CACHE_KEY" --quiet || true
   fi
+  rm -f /tmp/uv.tar.gz
 fi
-tar -xzf /tmp/uv.tar.gz -C /tmp
-mv /tmp/uv-x86_64-unknown-linux-musl/uv "$HOME/bin/uv"
-chmod +x "$HOME/bin/uv"
-rm -rf /tmp/uv.tar.gz /tmp/uv-x86_64-unknown-linux-musl
 
-# Layer 1: Restore agent home from tarball (preserves permissions/symlinks)
-if [ -n "$STATE_BUCKET" ] && "$AWS_BIN" --no-cli-pager s3 cp "s3://$STATE_BUCKET/$OPENAB_AGENT_NAME-home.tar.gz" /tmp/home.tar.gz --quiet 2>/dev/null; then
+# Layer 1: Restore runtime home snapshot (preserves permissions/symlinks)
+if [ -n "$STATE_BUCKET" ] && "$AWS_BIN" --no-cli-pager s3 cp "s3://$STATE_BUCKET/$RUNTIME_KEY" /tmp/home.tar.gz --quiet 2>/dev/null; then
+  tar xzf /tmp/home.tar.gz -C "$HOME"
+  rm -f /tmp/home.tar.gz
+elif [ -n "$STATE_BUCKET" ] && "$AWS_BIN" --no-cli-pager s3 cp "s3://$STATE_BUCKET/$LEGACY_RUNTIME_KEY" /tmp/home.tar.gz --quiet 2>/dev/null; then
   tar xzf /tmp/home.tar.gz -C "$HOME"
   rm -f /tmp/home.tar.gz
 fi
 
-# Layer 2.1: Overlay global shared assets (all agents common)
+# Layer 2: Overlay global shared assets (all agents common)
 if [ -n "$STATE_BUCKET" ]; then
-  "$AWS_BIN" --no-cli-pager s3 sync "s3://$STATE_BUCKET/shared/common/" "$HOME/" || true
+  "$AWS_BIN" --no-cli-pager s3 sync "s3://$STATE_BUCKET/layers/2-common/" "$HOME/" || true
 fi
 
-# Layer 2.2: Overlay shared backend assets (skills, config per backend type)
+# Layer 3: Overlay backend-specific shared assets
 if [ -n "$STATE_BUCKET" ] && [ -n "$OPENAB_BACKEND_AGENT" ]; then
-  "$AWS_BIN" --no-cli-pager s3 sync "s3://$STATE_BUCKET/shared/$OPENAB_BACKEND_AGENT/" "$HOME/" || true
+  "$AWS_BIN" --no-cli-pager s3 sync "s3://$STATE_BUCKET/layers/3-backend/$OPENAB_BACKEND_AGENT/" "$HOME/" || true
 fi
 
-# Layer 3: Overlay shared AGENTS.md (always wins)
+# Layer 4: Overlay bot-specific static assets
 if [ -n "$STATE_BUCKET" ]; then
-  "$AWS_BIN" --no-cli-pager s3 cp "s3://$STATE_BUCKET/shared/AGENTS.md" "$HOME/" || true
+  "$AWS_BIN" --no-cli-pager s3 sync "s3://$STATE_BUCKET/layers/4-bot/$OPENAB_AGENT_NAME/" "$HOME/" || true
+fi
+
+# Layer 5: Overlay shared AGENTS.md (always wins)
+if [ -n "$STATE_BUCKET" ]; then
+  "$AWS_BIN" --no-cli-pager s3 cp "s3://$STATE_BUCKET/layers/5-agents/AGENTS.md" "$HOME/" || true
 fi
 
 # ghp: gh CLI shim that routes reads through ghpool

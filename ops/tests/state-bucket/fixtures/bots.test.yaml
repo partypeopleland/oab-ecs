@@ -1,0 +1,6 @@
+ghost:
+  backend_agent: agy
+  state_bucket: ghost-specific-bucket
+spirit:
+  backend_agent: kiro
+  state_bucket: ''

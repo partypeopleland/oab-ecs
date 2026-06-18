@@ -18,6 +18,7 @@
 3. **[deploy.sh](../ops/deploy.sh)**：自動化渲染與部署腳本（使用 yq 解析 YAML）。
 4. **[validate.sh](../ops/validate.sh)**：部署前驗證腳本。
 5. **[sync-hook-gists.sh](../ops/sync-hook-gists.sh)**：將 `hooks/` 中的 hook 腳本同步到 `bots.yaml` 設定的 gist，並刷新 SHA-256。
+6. **[state_layers.md](./state_layers.md)**：狀態分層、本地目錄與 S3 路徑模型。
 
 ---
 
@@ -44,22 +45,21 @@ ghost:
 > 因此修改 [hooks/pre-boot.sh](../hooks/pre-boot.sh) 或 [hooks/pre-shutdown.sh](../hooks/pre-shutdown.sh) 後，必須先執行 `ops/sync-hook-gists.sh`，讓 gist 內容與 `bots.yaml` 的 SHA-256 一起更新。完整規範請見 [hooks_gist_sync.md](./hooks_gist_sync.md)。
 
 ## ⚙️ 機器人專屬人設與狀態同步 (Bot Personality & State)
-為了解決全域規則與專屬人設混合的問題，我們採用了「規則、人設與工具」分離的機制：
+目前採用 5-layer 模型，請以 [state_layers.md](./state_layers.md) 為唯一來源。
 
-1. **全域協作與維運規則 (AGENTS.md)**：
-   放置於 `state/shared/AGENTS.md`，定義所有 Bot 必須無條件遵循的核心指引（例如：不預設解決方案、先分析步驟等）。此檔案會被強制覆蓋至所有 Bot 的 `/home/agent/AGENTS.md`。
+本地 repo 中可人工維護的靜態層全部位於 `state/layers/`：
 
-2. **個別 Bot 專屬人設 (Identity.md)**：
-   建立於個別目錄下（例如 `state/ghost/steering/Identity.md`），填入該 Bot 的人格特質。開機時會解壓至容器中的 `/home/agent/steering/Identity.md`。
+1. `state/layers/2-common/`
+2. `state/layers/3-backend/<backend>/`
+3. `state/layers/4-bot/<bot>/`
+4. `state/layers/5-agents/AGENTS.md`
 
-3. **全域可用工具說明 (TOOLS.md)**：
-   放置於 `state/shared/common/TOOLS.md`，介紹放在 `bin/` 底下的工具功能（如 `aws`, `gh`, `uv`）。開機時會同步至 `/home/agent/TOOLS.md`。
+任何上述靜態層修改後，請執行：
+```bash
+ops/upload-layers.sh <bot_name>
+```
 
-4. **同步狀態至 S3**：
-   任何本地狀態（包含 shared 與專屬人設）修改後，請務必執行 `saveBucket.sh` 同步至 S3：
-   ```bash
-   ops/saveBucket.sh <bot_name>
-   ```
+> `upload-layers.sh` 只會同步 Layer 2-5，不會覆蓋 Layer 1 runtime snapshot。
 
 ---
 
@@ -89,7 +89,7 @@ cat ops/aws-env.yaml
 
 ### Step 3. 驗證 Secrets
 確保 `bots.yaml` 中設定的 `secret_path` 在 AWS 中已建立且寫入了 `DISCORD_BOT_TOKEN`。若 agent 需要使用 `gh`，可在同一個 Secret 內額外加入 `GH_TOKEN`；沒有設定也不會阻止服務啟動。
-若使用可選的 `GH_TOKEN` 輔助腳本，請先確認 `state/shared/common/.openab/get-optional-gh-token.sh` 已經透過 `ops/saveBucket.sh <bot_name>` 同步到 S3，否則容器首次啟動時不會拿到這個共用檔案。
+若使用可選的 `GH_TOKEN` 輔助腳本，請先確認 `state/layers/2-common/.openab/get-optional-gh-token.sh` 已經透過 `ops/upload-layers.sh <bot_name>` 同步到 S3，否則容器首次啟動時不會拿到這個共用檔案。
 
 ### Step 4. 執行部署
 ```bash

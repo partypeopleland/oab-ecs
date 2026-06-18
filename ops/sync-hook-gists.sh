@@ -80,11 +80,15 @@ sync_hook() {
     fi
 
     echo "  更新 gist: $gist_id ($gist_filename)"
-    gh api --method PATCH "gists/$gist_id" \
+    if ! gh api --method PATCH "gists/$gist_id" \
       -F "files[$gist_filename][content]=@$local_path" \
-      >/dev/null
+      > /dev/null; then
+      echo "錯誤: 無法更新 gist $gist_id，請檢查 gh 登入狀態與寫入權限。"
+      exit 1
+    fi
 
-    remote_sha="$(curl -fsSL "$hook_url" | sha256sum | awk '{print $1}')"
+    # 使用 gh api 取得 Gist 最新內容以避免 CDN 快取延遲
+    remote_sha="$(gh api "gists/$gist_id" | jq -j ".files[\"$gist_filename\"].content" | sha256sum | awk '{print $1}')"
     if [ "$remote_sha" != "$local_sha" ]; then
       echo "錯誤: gist 更新後 SHA256 不一致"
       echo "  URL: $hook_url"
@@ -108,6 +112,7 @@ sync_hook() {
 main() {
   require_cmd gh
   require_cmd yq
+  require_cmd jq
   require_cmd curl
   require_cmd sha256sum
 

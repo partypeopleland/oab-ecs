@@ -4,12 +4,14 @@
 set -e
 
 if [ -z "$1" ]; then
-  echo "使用方法: $0 <bot名稱>"
+  echo "使用方法: $0 <bot名稱> [顯示行數]"
   echo "例如: $0 ghost"
+  echo "      $0 ghost 100"
   exit 1
 fi
 
 BOT_NAME=$1
+LIMIT=${2:-50}
 SERVICE_NAME="openab-$BOT_NAME"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -59,6 +61,12 @@ echo "------------------------------------------"
 echo "[2/3] 正在取得運行中/配置中的 Task 資訊..."
 TASK_ARNS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE_NAME" --query "taskArns" --output text)
 
+ACTIVE_TASK_ID=""
+if [ -n "$TASK_ARNS" ] && [ "$TASK_ARNS" != "None" ]; then
+  FIRST_TASK_ARN=$(echo "$TASK_ARNS" | awk '{print $1}')
+  ACTIVE_TASK_ID="${FIRST_TASK_ARN##*/}"
+fi
+
 if [ -z "$TASK_ARNS" ] || [ "$TASK_ARNS" = "None" ]; then
   echo "ℹ️ 目前無任何運行中或啟動中的 Task 任務。"
 else
@@ -69,11 +77,19 @@ fi
 echo "------------------------------------------"
 
 # 3. 查詢最新 CloudWatch 日誌
-echo "[3/3] 正在從 CloudWatch 取得最近 15 筆日誌..."
+echo "[3/3] 正在從 CloudWatch 取得最近 $LIMIT 筆日誌..."
 LOG_GROUP="/ecs/$SERVICE_NAME"
 
-# 取得最新 log stream
-STREAM_NAME=$(aws logs describe-log-streams --log-group-name "$LOG_GROUP" --order-by LastEventTime --descending --limit 1 --query "logStreams[0].logStreamName" --output text 2>/dev/null || echo "")
+STREAM_NAME=""
+if [ -n "$ACTIVE_TASK_ID" ]; then
+  # 優先尋找名稱包含目前運行中 Task ID 的 log stream
+  STREAM_NAME=$(aws logs describe-log-streams --log-group-name "$LOG_GROUP" --query "logStreams[?contains(logStreamName, '$ACTIVE_TASK_ID')].logStreamName" --output text 2>/dev/null || echo "")
+fi
+
+# 如果找不到（例如新容器還沒建立 Log Stream），或是目前無運行中的 Task，則 Fallback 排序 LastEventTime
+if [ -z "$STREAM_NAME" ] || [ "$STREAM_NAME" = "None" ]; then
+  STREAM_NAME=$(aws logs describe-log-streams --log-group-name "$LOG_GROUP" --order-by LastEventTime --descending --limit 1 --query "logStreams[0].logStreamName" --output text 2>/dev/null || echo "")
+fi
 
 if [ -z "$STREAM_NAME" ] || [ "$STREAM_NAME" = "None" ]; then
   echo "⚠️ 找不到日誌群組 '$LOG_GROUP' 或尚無任何日誌流事件。"
@@ -81,11 +97,11 @@ else
   echo "最新日誌流: $STREAM_NAME"
   echo "--- 日誌輸出開始 ---"
 
-  # 取得最近 15 筆事件，並將毫秒時間戳轉為可讀格式
-  aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$STREAM_NAME" --limit 15 \
+  # 取得最近 $LIMIT 筆事件，並將毫秒時間戳轉為可讀格式
+  aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$STREAM_NAME" --limit "$LIMIT" \
     --query "events[*].{time:timestamp,message:message}" --output json 2>/dev/null \
     | jq -r '.[] | "\((.time/1000) | todate) | \(.message)"' 2>/dev/null || \
-  aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$STREAM_NAME" --limit 15 \
+  aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$STREAM_NAME" --limit "$LIMIT" \
     --query "events[*].message" --output text
 
   echo "--- 日誌輸出結束 ---"

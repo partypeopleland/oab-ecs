@@ -36,8 +36,8 @@ if [ -n "$STATE_BUCKET" ]; then
     --exclude="./tmp" \
     . 2>/dev/null || [ $? -le 2 ]
   
-  # 上傳至 S3
-  "$AWS_BIN" --no-cli-pager s3 cp /tmp/home-backup.tar.gz "s3://$STATE_BUCKET/$OPENAB_AGENT_NAME-home.tar.gz" --quiet || true
+  # 上傳至 S3 runtime layer
+  "$AWS_BIN" --no-cli-pager s3 cp /tmp/home-backup.tar.gz "s3://$STATE_BUCKET/runtime/$OPENAB_AGENT_NAME/home.tar.gz" --quiet || true
   rm -f /tmp/home-backup.tar.gz
   echo "✓ 備份完成！"
 fi

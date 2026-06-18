@@ -17,6 +17,31 @@ get_default() {
   fi
 }
 
+get_yaml_scalar() {
+  local key=$1
+  if [ -f "$DEFAULTS_FILE" ]; then
+    grep -m 1 -E "^${key}:" "$DEFAULTS_FILE" \
+      | head -n 1 \
+      | sed -E "s/^${key}:[[:space:]]*//; s/^['\"]//; s/['\"]$//"
+  else
+    echo ""
+  fi
+}
+
+get_yaml_list() {
+  local key=$1
+  if [ -f "$DEFAULTS_FILE" ]; then
+    awk -v key="$key" '
+      $0 ~ "^" key ":" { in_block=1; next }
+      in_block && /^[^[:space:]]/ { exit }
+      in_block && /^[[:space:]]*-[[:space:]]*/ {
+        sub(/^[[:space:]]*-[[:space:]]*/, "", $0)
+        print
+      }
+    ' "$DEFAULTS_FILE"
+  fi
+}
+
 CLUSTER_NAME=$(get_default "cluster_name")
 [ -z "$CLUSTER_NAME" ] && CLUSTER_NAME="openab-cluster"
 
@@ -41,6 +66,17 @@ fi
 ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
 REGION=$(aws configure get region || echo "us-east-1")
 echo "✓ AWS CLI 已通過驗證。帳號 ID: $ACCOUNT_ID, 預設區域: $REGION"
+
+# 讀取網路覆寫（若有）。移到認證之後，避免未登入時就呼叫 AWS API。
+VPC_ID_OVERRIDE=$(get_yaml_scalar "vpc_id")
+SUBNET_IDS_OVERRIDE=$(get_yaml_list "subnet_ids")
+
+if [ -n "$SUBNET_IDS_OVERRIDE" ] && [ -z "$VPC_ID_OVERRIDE" ]; then
+  FIRST_SUBNET=$(printf '%s\n' "$SUBNET_IDS_OVERRIDE" | sed -n '1p')
+  if [ -n "$FIRST_SUBNET" ]; then
+    VPC_ID_OVERRIDE=$(aws ec2 describe-subnets --subnet-ids "$FIRST_SUBNET" --query "Subnets[0].VpcId" --output text 2>/dev/null || true)
+  fi
+fi
 
 STATE_BUCKET_NAME=$(get_default "state_bucket_name")
 [ -z "$STATE_BUCKET_NAME" ] && STATE_BUCKET_NAME="openab-state-bucket-$ACCOUNT_ID"
@@ -149,10 +185,15 @@ if [ -n "$sg" ] && [ "$sg" != "None" ]; then
   echo "✓ Security Group '$SG_NAME' ($sg) 已經存在。略過建立。"
   vpc_id=$(aws ec2 describe-security-groups --group-ids "$sg" --query "SecurityGroups[0].VpcId" --output text)
 else
-  echo "⚠️ Security Group '$SG_NAME' 不存在。正在尋找預設 VPC..."
-  vpc_id=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text 2>/dev/null || true)
-  if [ -z "$vpc_id" ] || [ "$vpc_id" = "None" ]; then
-    vpc_id=$(aws ec2 describe-vpcs --query "Vpcs[0].VpcId" --output text 2>/dev/null || true)
+  if [ -n "$VPC_ID_OVERRIDE" ]; then
+    vpc_id="$VPC_ID_OVERRIDE"
+    echo "⚠️ Security Group '$SG_NAME' 不存在。使用 aws-init.yaml 指定的 VPC '$vpc_id'..."
+  else
+    echo "⚠️ Security Group '$SG_NAME' 不存在。正在尋找預設 VPC..."
+    vpc_id=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text 2>/dev/null || true)
+    if [ -z "$vpc_id" ] || [ "$vpc_id" = "None" ]; then
+      vpc_id=$(aws ec2 describe-vpcs --query "Vpcs[0].VpcId" --output text 2>/dev/null || true)
+    fi
   fi
   
   if [ -n "$vpc_id" ] && [ "$vpc_id" != "None" ]; then
@@ -170,7 +211,12 @@ fi
 # ==========================================
 echo "------------------------------------------"
 echo "4. 正在探測 VPC ($vpc_id) 的 Subnets..."
-subnets=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc_id" --query "Subnets[*].SubnetId" --output text | tr '\t' '\n' | head -n 2)
+if [ -n "$SUBNET_IDS_OVERRIDE" ]; then
+  echo "⚠️ 使用 aws-init.yaml 指定的 subnet_ids。"
+  subnets="$SUBNET_IDS_OVERRIDE"
+else
+  subnets=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc_id" --query "Subnets[*].SubnetId" --output text | tr '\t' '\n' | head -n 2)
+fi
 
 if [ -z "$subnets" ]; then
   echo "錯誤: 在 VPC '$vpc_id' 中找不到任何 Subnets。"

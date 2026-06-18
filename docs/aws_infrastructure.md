@@ -34,13 +34,25 @@ yq --version
 ### Step 3. 初始化 AWS 環境資源 (ops/aws-init.sh)
 檢查本地是否存在 `aws-env.yaml`：
 * **若不存在**：
-  1. 讀取並確認 [aws-init.yaml](../ops/aws-init.yaml) 內的自訂名稱（例如 `cluster_name` 等）。
+  1. 讀取並確認 [aws-init.yaml](../ops/aws-init.yaml) 內的自訂名稱與網路覆寫（例如 `cluster_name`、`vpc_id`、`subnet_ids`）。
   2. 執行初始化腳本：
      ```bash
      ops/aws-init.sh
      ```
   3. 該腳本會檢查並自動建立上述所有缺失的 AWS 資源（冪等操作，已存在則跳過），並自動生成本地的 `aws-env.yaml`。
   4. 同時會將 uv 下載包快取至 S3，加速後續容器啟動。
+
+### `aws-init.yaml` 的網路覆寫
+若你的 AWS 環境不是標準 default VPC，或你想固定使用特定子網，可以在 [aws-init.yaml](../ops/aws-init.yaml) 內填：
+
+```yaml
+vpc_id: vpc-xxxxxxxx
+subnet_ids:
+  - subnet-aaaaaaaa
+  - subnet-bbbbbbbb
+```
+
+`aws-init.sh` 會優先使用這組覆寫值；如果沒有填，再回到既有的自動探測流程。
 
 ---
 
@@ -65,5 +77,5 @@ security_groups: |
 ---
 
 ## 🔄 uv 工具快取機制
-容器啟動時，`pre-boot.sh` 會優先自 S3 快取路徑 `cache/uv-x86_64-unknown-linux-musl.tar.gz` 複製並安裝 `uv`，若快取不存在則從 GitHub 官方下載並寫入快取，以加速後續容器的啟動。
-*(註：AWS CLI 安裝包為避免 cold start 時的複雜認證問題，改為每次直接自官方外網下載。)*
+容器啟動時，`pre-boot.sh` 會優先自 S3 快取路徑 `cache/uv-0.11.21-x86_64-unknown-linux-musl.tar.gz` 複製並安裝 `uv`。若快取不存在，則改下載固定版本 `0.11.21`，並先比對官方提供的 `sha256` 後再安裝，之後才會寫回快取。
+*(註：AWS CLI 改為每次直接下載固定版本 `2.35.7` 再安裝。)*

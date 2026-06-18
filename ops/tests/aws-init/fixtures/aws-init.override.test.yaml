@@ -1,0 +1,9 @@
+cluster_name: openab-cluster
+execution_role_name: openab-task-execution-role
+task_role_name: openab-task-role
+security_group_name: openab-sg
+vpc_id: vpc-explicit-123
+subnet_ids:
+  - subnet-explicit-a
+  - subnet-explicit-b
+state_bucket_name: ''

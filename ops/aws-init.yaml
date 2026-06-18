@@ -6,4 +6,6 @@ cluster_name: openab-cluster
 execution_role_name: openab-task-execution-role
 task_role_name: openab-task-role
 security_group_name: openab-sg
+vpc_id: ''
+subnet_ids: []
 state_bucket_name: ''

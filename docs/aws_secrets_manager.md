@@ -92,4 +92,4 @@ env = { GH_TOKEN = "${secrets.gh_token}" }
 * **變數對照**：`{{secret_path}}` 將會被替換為 Bot 的密鑰路徑（如 `openab/oab-ghost`）。
 * **用途說明**：`GH_TOKEN` 會透過 `[agent].env` 傳給 agent subprocess，供容器內的 `gh` 直接使用。
 * **可選行為**：`DISCORD_BOT_TOKEN` 仍是必填；`GH_TOKEN` 會由輔助腳本在 `pre_boot` 完成後嘗試從同一個 Secret 讀取。若不存在、讀取失敗或沒有權限，會回傳空字串並略過，不會阻止 OpenAB 啟動。
-* **腳本位置**：輔助腳本應放在 `state/shared/common/.openab/get-optional-gh-token.sh`，並先用 `ops/saveBucket.sh <bot_name>` 同步到 S3，讓 `pre_boot` 還原到容器內的 `/home/agent/.openab/get-optional-gh-token.sh`。
+* **腳本位置**：輔助腳本應放在 `state/layers/2-common/.openab/get-optional-gh-token.sh`，並先用 `ops/upload-layers.sh <bot_name>` 同步到 S3，讓 `pre_boot` 還原到容器內的 `/home/agent/.openab/get-optional-gh-token.sh`。

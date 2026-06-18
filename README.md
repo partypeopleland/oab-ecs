@@ -43,8 +43,9 @@
   * [deployment.md](./docs/deployment.md) - 機器人部署指南
   * [hooks_gist_sync.md](./docs/hooks_gist_sync.md) - hook 腳本與 gist 同步規範
   * [observability.md](./docs/observability.md) - 監控、日誌與容器偵錯指南
+  * [state_layers.md](./docs/state_layers.md) - 狀態分層、本地目錄與 S3 路徑模型
 * [hooks/](./hooks) - 容器啟動與關閉的鉤子腳本目錄，包含 [pre-boot.sh](./hooks/pre-boot.sh) 與 [pre-shutdown.sh](./hooks/pre-shutdown.sh)
-* [state/](./state) - 本地機器人狀態與人設範本目錄 (包含專屬與共用配置)
+* [state/](./state) - 本地靜態 overlay layers 目錄，對應 Layer 2-5（Layer 1 runtime 不落在 repo）
 * [ops/](./ops) - 維運相關腳本與設定目錄：
   * [bots.yaml](./ops/bots.yaml) - 所有 Bot 實例的設定對照表
   * [openab-ecs.yaml.template](./ops/openab-ecs.yaml.template) - 通用的 ECS Service 部署模板
@@ -53,11 +54,13 @@
   * [deploy.sh](./ops/deploy.sh) - 自動化部署/渲染指令腳本 (Bash, 使用 yq)
   * [validate.sh](./ops/validate.sh) - 驗證 bots.yaml 設定是否合法 (Bash, 使用 yq)
   * [aws-destroy.sh](./ops/aws-destroy.sh) - 停止並清理 Bot 的 ECS 服務及相關資源 (Bash)
-  * [saveBucket.sh](./ops/saveBucket.sh) - 手動同步本地狀態至 S3 (Bash)
-  * [restoreBucket.sh](./ops/restoreBucket.sh) - 從 S3 下載與還原狀態至本地新路徑 (Bash)
+  * [upload-layers.sh](./ops/upload-layers.sh) - 手動同步本地 overlay layers 至 S3 (Bash)
+  * [restore-layer1.sh](./ops/restore-layer1.sh) - 從 S3 下載與還原 Layer 1 狀態至本地新路徑 (Bash)
+  * [check-layers.sh](./ops/check-layers.sh) - 檢查運行中容器的 Layer 2-5 同步狀態 (Bash)
   * [status.sh](./ops/status.sh) - 查詢特定 Bot 的 ECS 服務狀態、任務詳情與最新日誌 (Bash)
   * [sync-hook-gists.sh](./ops/sync-hook-gists.sh) - 將 `hooks/` 目錄中的 hook 腳本同步到 GitHub gist，並刷新 `bots.yaml` 的 SHA-256
   * [test-deploy.sh](./ops/test-deploy.sh) - 自動化部署腳本的單元測試 (Bash)
+  * [tests/](./ops/tests) - 各腳本對應的驗證資料與測試腳本
   * `aws-env.yaml` - (Git 忽略) 自動生成的本地 AWS 環境與網路設定檔案
 * `restored/` - (Git 忽略) 本地測試下載還原之機器人狀態暫存目錄
 
@@ -120,38 +123,36 @@ ghost:
 * 整合了 `pre_boot` 與 `pre_shutdown` 鉤子，在容器啟動前載入檔案，並在容器關閉前自動備份到 S3。
 
 ### 3. 狀態與人設管理機制 (S3 State & Layering)
-當 Bot 容器啟動時，會執行開機鉤子 (`pre-boot.sh`) 來還原與同步狀態。其載入機制採用以下分層優先順序：
+當 Bot 容器啟動時，會執行開機鉤子 (`pre-boot.sh`) 來還原與同步狀態。完整模型請見 [state_layers.md](./docs/state_layers.md)。其載入順序為：
 
-1. **Layer 1：還原 Bot 專屬資料** (下載並解壓 `s3://<bucket>/<bot_name>-home.tar.gz`)
-   * 還原特定機器人的專屬檔案與狀態，包括放在 `steering/Identity.md` 的專屬人設檔案。
-2. **Layer 2.1：覆蓋全域共用資料** (從 `s3://<bucket>/shared/common/` 同步)
-   * 載入所有 Bot 共用的通用資源，如可用工具清單說明檔 `TOOLS.md`。
-3. **Layer 2.2：覆蓋後端共用資料** (從 `s3://<bucket>/shared/<backend_agent>/` 同步)
-   * 覆蓋相同後端類型（例如 `agy`）機器人共用的技能（skills）、設定檔等。
-4. **Layer 3：覆蓋全域維運規則檔** (下載 `s3://<bucket>/shared/AGENTS.md`)
-   * 強制寫入最新的全域協作與維運規則，此檔案會動態指引 Bot 閱讀本地的專屬人設與工具清單。
+1. **Layer 1：runtime snapshot** (`s3://<bucket>/runtime/<bot>/home.tar.gz`)
+2. **Layer 2：全域共用靜態資源** (`s3://<bucket>/layers/2-common/`)
+3. **Layer 3：backend 共用靜態資源** (`s3://<bucket>/layers/3-backend/<backend>/`)
+4. **Layer 4：bot 專屬靜態資源** (`s3://<bucket>/layers/4-bot/<bot>/`)
+5. **Layer 5：共用 AGENTS.md** (`s3://<bucket>/layers/5-agents/AGENTS.md`)
 
 #### 📌 如何設定「專屬人設」與「工具說明」？
-* **全域共用維運規則**：請編輯 `state/shared/AGENTS.md`，定義 Agent 的維運底線與核心協作規則。
-* **個別 Bot 專屬人設**：請建立於各自的專屬目錄下（例如 `state/ghost/steering/Identity.md`），填入專屬角色人格（如：我的名字是 Ghost）。
-* **共用工具說明**：請編輯 `state/shared/common/TOOLS.md`，記錄部署在 `/home/agent/bin/` 底下的工具（如 `aws`, `gh`, `uv`）的詳細功能。
+* **全域共用維運規則**：請編輯 `state/layers/5-agents/AGENTS.md`。
+* **個別 Bot 專屬人設**：請建立於 `state/layers/4-bot/<bot>/` 下（例如 `state/layers/4-bot/ghost/steering/Identity.md`）。
+* **共用工具說明**：請編輯 `state/layers/2-common/TOOLS.md`。
 
 ### 4. 工具快取與下載機制
 為了加速容器啟動並確保冷啟動時的認證穩定性：
-* **`uv` (Python 包管理器)**：優先從 S3 快取路徑 `cache/uv-x86_64-unknown-linux-musl.tar.gz` 獲取，若不存在則自 GitHub 下載並上傳快取，大幅縮短啟動時間。
-* **`aws` (AWS CLI)**：每次容器啟動時，直接自 AWS 官方外網下載並解壓縮安裝，確保免去 cold start 時 S3 預簽章或角色憑證過期等認證干擾。
+* **`uv` (Python 包管理器)**：優先從 S3 快取路徑 `cache/uv-0.11.21-x86_64-unknown-linux-musl.tar.gz` 獲取，若不存在則下載固定版本 `0.11.21`，並先以官方提供的 `sha256` 檢查再安裝。
+* **`aws` (AWS CLI)**：每次容器啟動時，直接下載固定版本 `2.35.7` 再解壓縮安裝，避免 `latest` 帶來的啟動漂移。
 
 ---
 
 ## 📋 部署 SOP 與指令範例
 
 ### 前置作業：初始化環境
-如果您需要自訂自動建立的 AWS 資源名稱（如 Cluster、Role、Security Group 名稱），可以先編輯 [aws-init.yaml](./ops/aws-init.yaml)。
+如果您需要自訂自動建立的 AWS 資源名稱或明確指定 VPC / subnet，可以先編輯 [aws-init.yaml](./ops/aws-init.yaml)。
 接著，請確保您已經在本機執行 `aws configure` 完成憑證設定，然後執行初始化腳本：
 ```bash
 ops/aws-init.sh
 ```
 這會自動根據設定檔中的名稱去探測/建立對應的 ECS、IAM、VPC 設定，並產生 `ops/aws-env.yaml` 檔案。
+如果 `aws-init.yaml` 內有填 `vpc_id` 或 `subnet_ids`，腳本會優先採用這些覆寫值，不再完全依賴自動探測。
 
 ### 1. 驗證設定
 在部署前，建議先驗證 `bots.yaml` 中所有 Bot 的設定是否合法：
@@ -225,8 +226,8 @@ ops/aws-destroy.sh ghost --purge-state --purge-secret  # 完整清理
 ```
 
 ### 7. 手動備份與復原 S3 狀態 (非部署流程時使用)
-- **備份本地狀態**：執行 `./ops/saveBucket.sh <bot名稱>` 以同步本地狀態至 S3。
-- **復原至新目錄**：執行 `./ops/restoreBucket.sh <bot名稱>` 從 S3 下載與解壓縮，這會放到 `restored/<bot名稱>` 目錄以防覆蓋。
+- **同步本地 overlay layers**：執行 `./ops/upload-layers.sh <bot名稱>`，只會同步 Layer 2-5，不會覆蓋 runtime snapshot。
+- **復原 runtime 狀態至新目錄**：執行 `./ops/restore-layer1.sh <bot名稱>` 從 S3 下載 runtime snapshot，這會放到 `restored/<bot名稱>` 目錄以防覆蓋。
 
 ### 8. 執行測試
 驗證部署腳本的 yq 解析與模板渲染是否正確：
