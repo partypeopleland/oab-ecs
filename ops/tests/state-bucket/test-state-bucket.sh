@@ -22,8 +22,8 @@ cleanup() {
   fi
 
   for bot in "${BOT_LIST[@]}"; do
-    rm -f "$ROOT_DIR/state/shared/.state-bucket-test-$bot"
-    rm -f "$ROOT_DIR/state/$bot/.state-bucket-test-$bot"
+    rm -rf "$ROOT_DIR/state/shared/.state-bucket-test"
+    rm -rf "$ROOT_DIR/state/$bot/.state-bucket-test"
     rm -rf "$ROOT_DIR/restored/$bot"
   done
 
@@ -87,33 +87,49 @@ file=${3:-}
 read_state_bucket() {
   local target=$1
   local file_path=$2
-  awk -v target="$target" '
-    $0 ~ "^" target ":" { in_block=1; next }
-    in_block && /^[^[:space:]]/ { exit }
-    in_block && $1 == "state_bucket:" {
-      sub(/^[[:space:]]*state_bucket:[[:space:]]*/, "", $0)
-      if ($0 == "" || $0 == "''") {
-        print "''"
-      } else {
+  local raw_value
+  raw_value=$(
+    awk -v target="$target" '
+      $0 ~ "^" target ":" { in_block=1; next }
+      in_block && /^[^[:space:]]/ { exit }
+      in_block && $1 == "state_bucket:" {
+        sub(/^[[:space:]]*state_bucket:[[:space:]]*/, "", $0)
         print $0
+        exit
       }
-      exit
-    }
-  ' "$file_path"
+    ' "$file_path"
+  )
+
+  case "$raw_value" in
+    "''"|"\"\""|"")
+      printf '\n'
+      ;;
+    *)
+      printf '%s\n' "$raw_value"
+      ;;
+  esac
 }
 
 read_global_state_bucket() {
-  awk '
-    $1 == "state_bucket:" {
-      sub(/^[[:space:]]*state_bucket:[[:space:]]*/, "", $0)
-      if ($0 == "" || $0 == "''") {
-        print "''"
-      } else {
+  local raw_value
+  raw_value=$(
+    awk '
+      $1 == "state_bucket:" {
+        sub(/^[[:space:]]*state_bucket:[[:space:]]*/, "", $0)
         print $0
+        exit
       }
-      exit
-    }
-  ' "$file"
+    ' "$file"
+  )
+
+  case "$raw_value" in
+    "''"|"\"\""|"")
+      printf '\n'
+      ;;
+    *)
+      printf '%s\n' "$raw_value"
+      ;;
+  esac
 }
 
 case "$mode" in
@@ -182,10 +198,13 @@ run_case() {
   local case_name=$1
   local bot_name=$2
   local expected_bucket=$3
-  local shared_marker="$ROOT_DIR/state/shared/.state-bucket-test-$bot_name"
-  local bot_marker="$ROOT_DIR/state/$bot_name/.state-bucket-test-$bot_name"
+  local shared_marker_dir="$ROOT_DIR/state/shared/.state-bucket-test"
+  local bot_marker_dir="$ROOT_DIR/state/$bot_name/.state-bucket-test"
+  local shared_marker="$shared_marker_dir/$case_name"
+  local bot_marker="$bot_marker_dir/$case_name"
   local case_dir="$TMP_DIR/$case_name"
   mkdir -p "$case_dir/bin" "$case_dir/restore-src"
+  mkdir -p "$shared_marker_dir" "$bot_marker_dir"
 
   local aws_log="$case_dir/aws.log"
   local restore_tar="$case_dir/home.tar.gz"

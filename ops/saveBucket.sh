@@ -36,11 +36,11 @@ if [ "$(yq eval "has(\"$BOT_NAME\")" "$BOTS_FILE")" != "true" ]; then
 fi
 
 STATE_BUCKET=$(yq eval ".\"$BOT_NAME\".state_bucket" "$BOTS_FILE")
-if [ -z "$STATE_BUCKET" ] || [ "$STATE_BUCKET" = "null" ] || [ "$STATE_BUCKET" = "''" ]; then
+if [ -z "$STATE_BUCKET" ] || [ "$STATE_BUCKET" = "null" ]; then
   STATE_BUCKET=$(yq eval '.state_bucket' "$ENV_FILE")
 fi
 
-if [ -z "$STATE_BUCKET" ] || [ "$STATE_BUCKET" = "null" ] || [ "$STATE_BUCKET" = "''" ]; then
+if [ -z "$STATE_BUCKET" ] || [ "$STATE_BUCKET" = "null" ]; then
   echo "錯誤: 未在 bots.yaml 或 aws-env.yaml 中設定 state_bucket。"
   exit 1
 fi
