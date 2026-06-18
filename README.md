@@ -58,6 +58,7 @@
   * [status.sh](./ops/status.sh) - 查詢特定 Bot 的 ECS 服務狀態、任務詳情與最新日誌 (Bash)
   * [sync-hook-gists.sh](./ops/sync-hook-gists.sh) - 將 `hooks/` 目錄中的 hook 腳本同步到 GitHub gist，並刷新 `bots.yaml` 的 SHA-256
   * [test-deploy.sh](./ops/test-deploy.sh) - 自動化部署腳本的單元測試 (Bash)
+  * [tests/](./ops/tests) - 各腳本對應的驗證資料與測試腳本
   * `aws-env.yaml` - (Git 忽略) 自動生成的本地 AWS 環境與網路設定檔案
 * `restored/` - (Git 忽略) 本地測試下載還原之機器人狀態暫存目錄
 
