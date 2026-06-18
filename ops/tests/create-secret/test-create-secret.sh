@@ -53,7 +53,6 @@ run_case() {
   local yq_log="$case_dir/yq.log"
   local aws_stub="$case_dir/bin/aws"
   local yq_stub="$case_dir/bin/yq"
-  local had_env_file=0
 
   cat > "$aws_stub" <<'EOF'
 #!/bin/bash
@@ -77,19 +76,9 @@ EOF
 
   local env_file="$ROOT_DIR/ops/aws-env.yaml"
   if [ "$env_file_mode" = "with-env" ]; then
-    if [ -f "$env_file" ]; then
-      had_env_file=1
-      ENV_WAS_PRESENT=1
-      cp "$env_file" "$ORIGINAL_ENV_BACKUP"
-    fi
     cp "$SCRIPT_DIR/fixtures/aws-env.test.yaml" "$env_file"
   else
-    if [ -f "$env_file" ]; then
-      had_env_file=1
-      ENV_WAS_PRESENT=1
-      cp "$env_file" "$ORIGINAL_ENV_BACKUP"
-      rm -f "$env_file"
-    fi
+    rm -f "$env_file"
   fi
 
   if ! "$ROOT_DIR/ops/create-secret.sh" ghost "$token_value" >/dev/null 2>&1; then
@@ -123,14 +112,13 @@ EOF
       fi
     fi
   fi
-
-  if [ "$had_env_file" -eq 1 ] && [ "$ENV_WAS_PRESENT" -eq 1 ] && [ -f "$ORIGINAL_ENV_BACKUP" ]; then
-    mv -f "$ORIGINAL_ENV_BACKUP" "$env_file"
-    ENV_WAS_PRESENT=0
-  elif [ "$env_file_mode" = "with-env" ]; then
-    rm -f "$env_file"
-  fi
 }
+
+# 備份最原始的環境變數檔案
+if [ -f "$ROOT_DIR/ops/aws-env.yaml" ]; then
+  ENV_WAS_PRESENT=1
+  cp "$ROOT_DIR/ops/aws-env.yaml" "$ORIGINAL_ENV_BACKUP"
+fi
 
 echo "=== create-secret.sh 測試 ==="
 
