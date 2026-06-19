@@ -1,24 +1,23 @@
-# Bot 設定模型與模板映射
+# `ops/bots.yaml` 契約
 
-本文件描述 `ops/bots.yaml` 的資料模型、欄位語意，以及這些欄位如何被 `ops/deploy.sh` 映射進 `ops/openab-ecs.yaml.template`。
+這份文件只描述 `ops/bots.yaml`。它回答三件事：
 
-目標是讓人類與 AI 在修改 Bot 設定時，可以先理解「哪些值只是 metadata、哪些值會直接影響部署結果」。
+1. 哪些欄位是 bot 專屬設定
+2. 這些欄位會影響哪個部署結果
+3. 改完後通常還要同步檢查哪些地方
 
-## 單一責任
+## 邊界
 
-`ops/bots.yaml` 只負責 **Bot 實例專屬設定**。
+`ops/bots.yaml` 只放 bot 實例專屬設定，不放：
 
-它不應承載：
+- AWS 帳號
+- VPC / subnet / security group
+- cluster 名稱
+- IAM role ARN
 
-* AWS 帳號、VPC、subnet、security group 等環境級資訊
-* IAM Role ARN
-* ECS Cluster 名稱
+這些屬於 `ops/aws-env.yaml`，由 `ops/aws-init.sh` 產生。
 
-這些全域環境參數應放在 `ops/aws-env.yaml`，並由 `ops/aws-init.sh` 產生。
-
-## Schema
-
-每個頂層 key 都是一個 bot 名稱，例如：
+## 最小範例
 
 ```yaml
 ghost:
@@ -31,123 +30,94 @@ ghost:
   memory: '512'
   capacity: FARGATE_SPOT
   state_bucket: ''
-  pre_boot_url: 'https://gist.githubusercontent.com/.../raw/pre-boot.sh'
-  pre_boot_sha256: '...'
-  pre_shutdown_url: 'https://gist.githubusercontent.com/.../raw/pre-shutdown.sh'
-  pre_shutdown_sha256: '...'
+  pre_boot_url: https://gist.githubusercontent.com/.../raw/pre-boot.sh
+  pre_boot_sha256: ...
+  pre_shutdown_url: https://gist.githubusercontent.com/.../raw/pre-shutdown.sh
+  pre_shutdown_sha256: ...
 ```
 
-## 欄位說明
+## 欄位表
 
-### `backend_agent`
+| 欄位 | 用途 | 影響 |
+|---|---|---|
+| `backend_agent` | backend 類型，例如 `agy`、`kiro` | 寫入 `OPENAB_BACKEND_AGENT`；決定 Layer 3 路徑 `layers/3-backend/<backend>/` |
+| `image` | ECS task 容器映像 | 映射到 `spec.image` |
+| `agent_command` | 容器內啟動 agent 的主指令 | 寫入 `OPENAB_AGENT_COMMAND` 與 `config.toml [agent].command` |
+| `agent_args` | agent 啟動參數，必須是可直接嵌入 TOML 的陣列字串 | 寫入 `config.toml [agent].args`；空值會被補成 `[]` |
+| `secret_path` | Secrets Manager secret id | `DISCORD_BOT_TOKEN` 與可選 `GH_TOKEN` 的來源 |
+| `cpu` / `memory` | Fargate task 資源配置 | 映射到 `spec.cpu` / `spec.memory`；`ops/validate.sh` 會檢查組合是否合法 |
+| `capacity` | `FARGATE` 或 `FARGATE_SPOT` | 映射到 `spec.capacity` |
+| `state_bucket` | bot 專屬 S3 bucket 覆寫 | 空值時回退到 `ops/aws-env.yaml` 的全域 `state_bucket` |
+| `pre_boot_url` / `pre_shutdown_url` | hook 的遠端來源 | deploy 後 OpenAB 下載並執行這些 URL |
+| `pre_boot_sha256` / `pre_shutdown_sha256` | hook 內容的校驗值 | 修改 `hooks/*.sh` 後要用 `ops/sync-hook-gists.sh` 更新 |
 
-* 用途：標示 bot 所屬 backend 類型，例如 `agy`、`kiro`。
-* 影響：
-  * 會寫入容器環境變數 `OPENAB_BACKEND_AGENT`
-  * `pre-boot.sh` 會依此載入 `layers/3-backend/<backend>/`
-  * `ops/upload-layers.sh` 會同步對應的 Layer 3 目錄
-
-### `image`
-
-* 用途：ECS Task 使用的容器映像。
-* 影響：直接映射到 `spec.image`
-* 要求：需可在 ECS Fargate `X86_64` 上運行
-
-### `agent_command`
-
-* 用途：OpenAB 在容器內啟動 agent 的主指令。
-* 影響：
-  * 會寫入環境變數 `OPENAB_AGENT_COMMAND`
-  * 會寫入產出的 `/home/agent/config.toml`：
-    ```toml
-    [agent]
-    command = "<agent_command>"
-    ```
+## 幾個關鍵行為
 
 ### `agent_args`
 
-* 用途：agent 啟動參數，格式必須是可直接嵌入 TOML 的陣列字串。
-* 範例：
-  * `[]`
-  * `["acp", "--trust-all-tools"]`
-* 預設行為：若未設定、為空字串或 `null`，`deploy.sh` 會自動補成 `[]`
-* 影響：直接寫入 `/home/agent/config.toml` 的 `args`
+必須是 TOML 陣列字串，例如：
+
+- `[]`
+- `["acp", "--trust-all-tools"]`
+
+不是 YAML 陣列，也不是 shell 片段。
 
 ### `secret_path`
 
-* 用途：Secrets Manager secret id，例如 `openab/oab-ghost`
-* 影響：
-  * `DISCORD_BOT_TOKEN` 由 `aws-sm://<secret_path>#DISCORD_BOT_TOKEN` 載入
-  * `GH_TOKEN` 由 `/home/agent/.openab/get-optional-gh-token.sh <secret_path>` 嘗試讀取
+deploy 產生的 `config.toml` 會用：
 
-### `cpu` / `memory`
+- `aws-sm://<secret_path>#DISCORD_BOT_TOKEN`
+- `exec:///home/agent/.openab/get-optional-gh-token.sh <secret_path>`
 
-* 用途：Fargate task 資源配置
-* 型別：必須是字串，例如 `'256'`、`'512'`
-* 影響：直接映射到 `spec.cpu` 與 `spec.memory`
-* 驗證：`ops/validate.sh` 會檢查是否為合法的 Fargate 組合
+因此：
 
-### `capacity`
+- `DISCORD_BOT_TOKEN` 是必要欄位
+- `GH_TOKEN` 是可選欄位
 
-* 允許值：
-  * `FARGATE_SPOT`
-  * `FARGATE`
-* 影響：直接映射到 `spec.capacity`
+### hook URL
 
-### `state_bucket`
+`pre_boot_url` / `pre_shutdown_url` 指向遠端 gist。deploy 不會直接讀 repo 內的 `hooks/*.sh`。
 
-* 用途：可選的 bot 專屬 S3 bucket 覆寫
-* 預設行為：若為空字串或 `null`，`deploy.sh` 會回退使用 `ops/aws-env.yaml` 的全域 `state_bucket`
-* 影響：寫入環境變數 `STATE_BUCKET`，供 hook 與 runtime state 使用
+如果 URL 是 `gist.githubusercontent.com`，`ops/deploy.sh` 會自動附加時間戳 query 參數來降低 CDN 快取影響。
 
-### `pre_boot_url` / `pre_shutdown_url`
+## 主要映射結果
 
-* 用途：指定 hook 腳本的遠端來源
-* 實際使用者：ECS deploy 後由 OpenAB 下載並執行，不是直接讀 repo 內的 `hooks/*.sh`
-* 特別行為：`deploy.sh` 若偵測到 `gist.githubusercontent.com`，會自動附加 `?t=<timestamp>` 以降低 CDN 快取造成的舊內容問題
+`ops/deploy.sh` 會把 `bots.yaml` 與 `aws-env.yaml` 合併後渲染到 `.deploy-<bot>.yaml`。主要效果如下：
 
-### `pre_boot_sha256` / `pre_shutdown_sha256`
+- 服務名稱：`openab-<bot>`
+- container 名稱：`openab-<bot>`
+- log group：`/ecs/openab-<bot>`
+- `OPENAB_AGENT_NAME`：`<bot>`
+- `OPENAB_BACKEND_AGENT`：`backend_agent`
+- `OPENAB_AGENT_COMMAND`：`agent_command`
+- `STATE_BUCKET`：bot 專屬或全域 bucket
+- `config.toml [agent].command`：`agent_command`
+- `config.toml [agent].args`：`agent_args`
+- `config.toml [hooks.pre_boot]`：`pre_boot_url` / `pre_boot_sha256`
+- `config.toml [hooks.pre_shutdown]`：`pre_shutdown_url` / `pre_shutdown_sha256`
 
-* 用途：驗證 hook 腳本內容
-* 維護方式：修改 `hooks/*.sh` 後，應執行 `ops/sync-hook-gists.sh` 重新同步 gist 並刷新 hash
+## 改 bot 名稱時要注意
 
-## 部署時的映射結果
+bot 名稱不是單純改一個 key。它會連動：
 
-`ops/deploy.sh` 會把 `bots.yaml` 與 `aws-env.yaml` 合併後渲染到 `.deploy-<bot>.yaml`。主要映射如下：
+- ECS service / container / log group：`openab-<bot>`
+- Layer 4 路徑：`state/layers/4-bot/<bot>/`
+- runtime key：`runtime/<bot>/home.tar.gz`
+- 預設 secret 慣例：`openab/oab-<bot>`
 
-* `metadata.name` = `openab-<bot>`
-* `spec.containerName` = `openab-<bot>`
-* `spec.logGroup` = `/ecs/openab-<bot>`
-* `env.OPENAB_AGENT_NAME` = `<bot>`
-* `env.OPENAB_BACKEND_AGENT` = `backend_agent`
-* `env.OPENAB_AGENT_COMMAND` = `agent_command`
-* `env.STATE_BUCKET` = bot 專屬或全域 bucket
-* `config.toml [agent].command` = `agent_command`
-* `config.toml [agent].args` = `agent_args`
-* `config.toml [hooks.pre_boot]` = `pre_boot_url` / `pre_boot_sha256`
-* `config.toml [hooks.pre_shutdown]` = `pre_shutdown_url` / `pre_shutdown_sha256`
+通常至少要同步檢查：
 
-## 命名與相依關係
+- `ops/bots.yaml`
+- `state/layers/4-bot/<bot>/`
+- S3 上的 runtime 與 layer 路徑
+- secret path
+- 現有 ECS service 與 CloudWatch log group
 
-Bot 名稱會同時影響多個地方，因此改名不是單純改一個 key：
+## 最常見的修改後動作
 
-* ECS Service / Container / Log Group 名稱都會跟著變成 `openab-<bot>`
-* Layer 4 S3 路徑會變成 `layers/4-bot/<bot>/`
-* Layer 1 runtime key 會變成 `runtime/<bot>/home.tar.gz`
-* 預設 secret 命名慣例通常是 `openab/oab-<bot>`
-
-若要改 bot 名稱，通常必須同步檢查：
-
-* `ops/bots.yaml`
-* `state/layers/4-bot/<bot>/`
-* S3 state 與 runtime key
-* Secrets Manager secret path
-* 既有 ECS service / CloudWatch log group
-
-## 建議修改流程
-
-1. 先編輯 `ops/bots.yaml`
-2. 執行 `ops/validate.sh`
-3. 如有修改 hook，先執行 `ops/sync-hook-gists.sh`
-4. 如有修改 Layer 2-5 靜態內容，先執行 `ops/upload-layers.sh <bot>`
-5. 最後執行 `ops/deploy.sh <bot>` 或 `ops/deploy.sh <bot> render`
+| 變更 | 後續動作 |
+|---|---|
+| 改 image、cpu、memory、capacity、agent command | `ops/validate.sh` -> `ops/deploy.sh <bot>` |
+| 改 hook URL / SHA | 通常代表先處理 hook 原始碼，再 `ops/sync-hook-gists.sh` |
+| 改 backend_agent | 檢查 `state/layers/3-backend/<backend>/` 是否存在，再 `ops/upload-layers.sh <bot>` |
+| 改 state_bucket | 確認 bucket 內已有需要的 layers / runtime |

@@ -1,63 +1,145 @@
-# 狀態分層與 S3 路徑模型 (State Layers)
+# State Layers 模型
 
-本文件定義本 repo 對 Bot 狀態的分層模型、本地目錄結構，以及對應的 S3 路徑。目標是讓「容器 runtime 狀態」與「人工維護的靜態 overlay」完全分離，避免 `upload-layers.sh` 覆蓋 runtime 備份。
+本 repo 把 bot 狀態分成 5 層，目的只有一個：把「容器運行中自然生成的狀態」和「repo 內人工維護的靜態內容」分開。
 
-## 設計原則
+這樣可以避免：
 
-* **Layer 1 是 runtime snapshot**：只允許 `pre-boot.sh` / `pre-shutdown.sh` 讀寫，不提供本地人工同步入口。
-* **Layer 2-5 是靜態 overlay**：全部放在 `state/layers/` 下，同層級、同深度、同命名規則。
-* **命名以數字排序**：直接反映開機時的覆蓋順序，避免 `shared/common`、`shared/kiro`、`state/spirit` 這種深度與語意不一致的結構。
+- 上傳靜態檔時覆蓋 runtime 狀態
+- 還原 runtime 時把共用規則弄丟
+- 不同 backend / bot 的覆蓋順序混亂
 
-## Layer 定義
+## 核心原則
 
-1. **Layer 1: runtime**
-   * 用途：容器真實狀態，包含登入憑證、sqlite、cache、runtime 產生的檔案。
-   * 本地路徑：無。
-   * S3 路徑：`runtime/<bot>/home.tar.gz`
-   * 只由 `pre-shutdown.sh` 寫入，`pre-boot.sh` / `restore-layer1.sh` 還原。
+1. Layer 1 是 runtime snapshot，不在 repo 內編輯。
+2. Layer 2-5 是靜態 overlay，來源都在 `state/layers/`。
+3. 數字就是覆蓋順序，後面的層會蓋掉前面的內容。
 
-2. **Layer 2: common**
-   * 用途：所有 Bot 共用的靜態資源。
-   * 本地路徑：`state/layers/2-common/`
-   * S3 路徑：`layers/2-common/`
+## 一眼看懂覆蓋順序
 
-3. **Layer 3: backend**
-   * 用途：同 backend 類型共用的靜態資源。
-   * 本地路徑：`state/layers/3-backend/<backend>/`
-   * S3 路徑：`layers/3-backend/<backend>/`
+```text
+                  /\                      
+                 /L5\ ----------------------> L5: final AGENTS.md               (state/layers/5-agents/AGENTS.md)
+                /----\
+               /  L4  \ --------------------> bot-only static content           (state/layers/4-bot/<bot>/)
+              /--------\                   
+             /    L3    \ ------------------> backend shared content            (state/layers/3-backend/<backend>/)
+            /------------\                   
+           /      L2      \ ----------------> all bots shared content           (state/layers/2-common/)
+          /----------------\                 
+         /        L1        \ --------------> runtime snapshot / login / cache  (s3://<bucket>/runtime/<bot>/home.tar.gz)
+        /--------------------\               
 
-4. **Layer 4: bot**
-   * 用途：Bot 自身的靜態資源，例如專屬人設。
-   * 本地路徑：`state/layers/4-bot/<bot>/`
-   * S3 路徑：`layers/4-bot/<bot>/`
+bottom -> top = restore first -> override later
+```
 
-5. **Layer 5: agents**
-   * 用途：全域 `AGENTS.md`，永遠最後覆蓋。
-   * 本地路徑：`state/layers/5-agents/AGENTS.md`
-   * S3 路徑：`layers/5-agents/AGENTS.md`
+這張圖表示容器開機時的疊層順序：
 
-## pre-boot 還原順序
+- Layer 1 在最底部，先還原 runtime snapshot
+- Layer 2 到 Layer 4 逐層覆蓋共用、backend 共用、bot 專屬內容
+- Layer 5 最後覆蓋 `AGENTS.md`
 
-`pre-boot.sh` 依序執行：
+越上層代表越晚套用，因此同名檔案會以較上層為準。
 
-1. 從 `runtime/<bot>/home.tar.gz` 還原 runtime snapshot
-2. `layers/2-common/` sync 到 `$HOME/`
-3. `layers/3-backend/<backend>/` sync 到 `$HOME/`
-4. `layers/4-bot/<bot>/` sync 到 `$HOME/`
-5. `layers/5-agents/AGENTS.md` 複製到 `$HOME/AGENTS.md`
+## 五層定義
 
-> 相容性說明：為了平滑遷移，`pre-boot.sh` 與 `restore-layer1.sh` 目前仍接受舊版 runtime key `<bot>-home.tar.gz` 作為 fallback。新的寫入路徑一律使用 `runtime/<bot>/home.tar.gz`。
+| Layer | 用途 | repo 路徑 | S3 路徑 | 誰負責寫入 |
+|---|---|---|---|---|
+| 1 | runtime snapshot，例如登入憑證、sqlite、cache、session | 無 | `runtime/<bot>/home.tar.gz` | `pre-shutdown.sh` |
+| 2 | 所有 bot 共用的靜態內容 | `state/layers/2-common/` | `layers/2-common/` | `ops/upload-layers.sh` |
+| 3 | 同 backend 共用的靜態內容 | `state/layers/3-backend/<backend>/` | `layers/3-backend/<backend>/` | `ops/upload-layers.sh` |
+| 4 | bot 專屬靜態內容 | `state/layers/4-bot/<bot>/` | `layers/4-bot/<bot>/` | `ops/upload-layers.sh` |
+| 5 | 所有 bot 共用的最終 `AGENTS.md` | `state/layers/5-agents/AGENTS.md` | `layers/5-agents/AGENTS.md` | `ops/upload-layers.sh` |
 
-## upload-layers 的責任邊界
+## 開機還原順序
 
-`ops/upload-layers.sh <bot>` 只負責同步 Layer 2-5：
+`pre-boot.sh` 會依序做：
 
-* `state/layers/2-common/` -> `layers/2-common/`
-* `state/layers/3-backend/<backend>/` -> `layers/3-backend/<backend>/`
-* `state/layers/4-bot/<bot>/` -> `layers/4-bot/<bot>/`
-* `state/layers/5-agents/AGENTS.md` -> `layers/5-agents/AGENTS.md`
+1. 還原 Layer 1 `runtime/<bot>/home.tar.gz`
+2. sync Layer 2 到 `$HOME/`
+3. sync Layer 3 到 `$HOME/`
+4. sync Layer 4 到 `$HOME/`
+5. 複製 Layer 5 到 `$HOME/AGENTS.md`
 
-`upload-layers.sh` **不得**寫入 Layer 1 runtime snapshot。
+所以：
+
+- 共用檔案可被 backend 或 bot 專屬版本覆蓋
+- `AGENTS.md` 永遠最後覆蓋，確保容器內拿到的是最終規則
+
+```text
+Layer 2: everyone
+    overridden by
+Layer 3: same backend
+    overridden by
+Layer 4: this bot only
+    overridden by
+Layer 5: final AGENTS rule
+```
+
+相容性：
+
+- 新 key：`runtime/<bot>/home.tar.gz`
+- 舊 key：`<bot>-home.tar.gz`
+
+目前 `pre-boot.sh` 與 `ops/restore-layer1.sh` 都接受舊 key 作為 fallback。
+
+## `upload-layers.sh` 的責任邊界
+
+`ops/upload-layers.sh <bot>` 只處理 Layer 2-5：
+
+- `state/layers/2-common/` -> `layers/2-common/`
+- `state/layers/3-backend/<backend>/` -> `layers/3-backend/<backend>/`
+- `state/layers/4-bot/<bot>/` -> `layers/4-bot/<bot>/`
+- `state/layers/5-agents/AGENTS.md` -> `layers/5-agents/AGENTS.md`
+
+它不應碰 Layer 1。
+
+另外要注意：
+
+- Layer 2-4 使用 `aws s3 sync --delete`
+- 刪掉本地檔案後再上傳，S3 端對應檔案也會被刪除
+
+```text
+repo state/layers/* --upload--> S3 layers/*
+
+repo does NOT upload:
+  runtime/<bot>/home.tar.gz
+
+runtime/<bot>/home.tar.gz is written by:
+  pre-shutdown.sh
+```
+
+## 什麼該放哪一層
+
+Layer 2 常見內容：
+
+- `TOOLS.md`
+- `.openab/` 下的共用 helper script
+
+Layer 3 常見內容：
+
+- backend 專屬 `.profile`
+- `agentauth` alias
+- backend 共用設定
+
+Layer 4 常見內容：
+
+- bot 專屬 steering
+- bot 專屬規則
+- bot 專屬靜態檔
+
+Layer 5 常見內容：
+
+- 給容器內 agent 的全域協作規則
+
+## 不要放進 Layer 2-5 的東西
+
+以下通常屬於 Layer 1 runtime，不應手動塞進 `state/layers/`：
+
+- `.aws/`
+- `.cache/`
+- sqlite 資料檔
+- runtime 生成的 session / login 檔
+- `.local/share/...` 類工具狀態
 
 ## 本地目錄範例
 
@@ -68,21 +150,11 @@ state/
       TOOLS.md
       .openab/
     3-backend/
-      kiro/
-        .profile
       agy/
-        .profile
+      kiro/
     4-bot/
-      spirit/
-        steering/
       ghost/
-        steering/
+      spirit/
     5-agents/
       AGENTS.md
 ```
-
-## 使用建議
-
-* 想保留登入狀態、sqlite、cache：依賴 Layer 1 runtime snapshot。
-* 想從 repo 更新規則、工具說明、backend profile、bot人設：編輯 `state/layers/` 後執行 `ops/upload-layers.sh <bot>`。
-* 不要把 `.aws/`、`.local/share/kiro-cli/` 這類 runtime 檔案放進 Layer 2-5。
