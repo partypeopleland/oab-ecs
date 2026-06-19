@@ -3,9 +3,26 @@
 # 直接從 CloudWatch 取得特定 Bot 的 pre-boot 日誌並檢查 Layer 1~5 同步狀況。
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+用途:
+  從 CloudWatch 日誌檢查指定 bot 的 pre-boot 是否成功載入 Layer 1-5。
+
+使用方式:
+  check-layers.sh <bot名稱>
+
+範例:
+  ops/check-layers.sh ghost
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 if [ -z "${1:-}" ]; then
-  echo "使用方法: $0 <bot名稱>"
-  echo "例如: $0 ghost"
+  usage
   exit 1
 fi
 

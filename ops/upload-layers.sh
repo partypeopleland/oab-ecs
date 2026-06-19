@@ -3,10 +3,31 @@
 # 同步本地的 overlay layers 2~5 至 S3 Bucket
 set -e
 
+usage() {
+  cat <<'EOF'
+用途:
+  將本地 state/layers/2-common 到 5-agents 同步到指定 bot 使用的 S3 bucket。
+
+使用方式:
+  upload-layers.sh <bot名稱>
+
+範例:
+  ops/upload-layers.sh ghost
+  ops/upload-layers.sh spirit
+
+注意:
+  會對 Layer 2-4 使用 aws s3 sync --delete。
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 # 檢查引數
-if [ -z "$1" ]; then
-  echo "使用方法: $0 <bot名稱>"
-  echo "例如: $0 ghost"
+if [ -z "${1:-}" ]; then
+  usage
   exit 1
 fi
 

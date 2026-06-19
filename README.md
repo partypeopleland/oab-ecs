@@ -38,30 +38,9 @@
 ## 📂 目錄結構
 
 * [docs/](./docs) - 相關維運與 AI Agent 指引文件：
-  * [aws_infrastructure.md](./docs/aws_infrastructure.md) - AWS 基礎架構初始化指南
-  * [aws_secrets_manager.md](./docs/aws_secrets_manager.md) - AWS Secrets Manager 密鑰管理指南
-  * [deployment.md](./docs/deployment.md) - 機器人部署指南
-  * [hooks_gist_sync.md](./docs/hooks_gist_sync.md) - hook 腳本與 gist 同步規範
-  * [observability.md](./docs/observability.md) - 監控、日誌與容器偵錯指南
-  * [state_layers.md](./docs/state_layers.md) - 狀態分層、本地目錄與 S3 路徑模型
 * [hooks/](./hooks) - 容器啟動與關閉的鉤子腳本目錄，包含 [pre-boot.sh](./hooks/pre-boot.sh) 與 [pre-shutdown.sh](./hooks/pre-shutdown.sh)
 * [state/](./state) - 本地靜態 overlay layers 目錄，對應 Layer 2-5（Layer 1 runtime 不落在 repo）
 * [ops/](./ops) - 維運相關腳本與設定目錄：
-  * [bots.yaml](./ops/bots.yaml) - 所有 Bot 實例的設定對照表
-  * [openab-ecs.yaml.template](./ops/openab-ecs.yaml.template) - 通用的 ECS Service 部署模板
-  * [aws-init.yaml](./ops/aws-init.yaml) - AWS 資源建置名稱的預設設定檔
-  * [aws-init.sh](./ops/aws-init.sh) - 環境初始化與自動探測指令腳本
-  * [deploy.sh](./ops/deploy.sh) - 自動化部署/渲染指令腳本 (Bash, 使用 yq)
-  * [validate.sh](./ops/validate.sh) - 驗證 bots.yaml 設定是否合法 (Bash, 使用 yq)
-  * [aws-destroy.sh](./ops/aws-destroy.sh) - 停止並清理 Bot 的 ECS 服務及相關資源 (Bash)
-  * [upload-layers.sh](./ops/upload-layers.sh) - 手動同步本地 overlay layers 至 S3 (Bash)
-  * [restore-layer1.sh](./ops/restore-layer1.sh) - 從 S3 下載與還原 Layer 1 狀態至本地新路徑 (Bash)
-  * [check-layers.sh](./ops/check-layers.sh) - 檢查運行中容器的 Layer 2-5 同步狀態 (Bash)
-  * [status.sh](./ops/status.sh) - 查詢特定 Bot 的 ECS 服務狀態、任務詳情與最新日誌 (Bash)
-  * [sync-hook-gists.sh](./ops/sync-hook-gists.sh) - 將 `hooks/` 目錄中的 hook 腳本同步到 GitHub gist，並刷新 `bots.yaml` 的 SHA-256
-  * [test-deploy.sh](./ops/test-deploy.sh) - 自動化部署腳本的單元測試 (Bash)
-  * [tests/](./ops/tests) - 各腳本對應的驗證資料與測試腳本
-  * `aws-env.yaml` - (Git 忽略) 自動生成的本地 AWS 環境與網路設定檔案
 * `restored/` - (Git 忽略) 本地測試下載還原之機器人狀態暫存目錄
 
 ---

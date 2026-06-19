@@ -1,0 +1,12 @@
+cluster: openab-test-cluster
+execution_role_arn: arn:aws:iam::123456789012:role/openab-test-execution-role
+task_role_arn: arn:aws:iam::123456789012:role/openab-test-task-role
+state_bucket: openab-test-state-bucket
+region: us-west-2
+
+subnets: |
+  - subnet-test-a
+  - subnet-test-b
+
+security_groups: |
+  - sg-test-a

@@ -1,6 +1,28 @@
 #!/bin/bash
 set -e
 
+usage() {
+  cat <<'EOF'
+用途:
+  探測或建立 OpenAB ECS 部署所需的 AWS 基礎資源，並產生 ops/aws-env.yaml。
+
+使用方式:
+  aws-init.sh
+
+範例:
+  ops/aws-init.sh
+
+注意:
+  執行前請先完成 aws configure。
+  如需自訂 cluster / role / VPC / subnet，請先編輯 ops/aws-init.yaml。
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/aws-env.yaml"
 DEFAULTS_FILE="$SCRIPT_DIR/aws-init.yaml"

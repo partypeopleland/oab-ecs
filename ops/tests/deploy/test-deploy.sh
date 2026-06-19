@@ -4,11 +4,39 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BOTS_FILE="$SCRIPT_DIR/bots.yaml"
-ENV_FILE="$SCRIPT_DIR/aws-env.yaml"
-TEMPLATE_FILE="$SCRIPT_DIR/openab-ecs.yaml.template"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+OPS_DIR="$ROOT_DIR/ops"
+BOTS_FILE="$OPS_DIR/bots.yaml"
+ENV_FILE="$OPS_DIR/aws-env.yaml"
+TMP_DIR="$(mktemp -d)"
+ORIGINAL_BOTS_BACKUP="$TMP_DIR/original-bots.yaml"
+ORIGINAL_ENV_BACKUP="$TMP_DIR/original-aws-env.yaml"
+BOTS_WAS_PRESENT=0
+ENV_WAS_PRESENT=0
 PASS=0
 FAIL=0
+
+cleanup() {
+  local exit_code=$?
+
+  if [ "$BOTS_WAS_PRESENT" -eq 1 ] && [ -f "$ORIGINAL_BOTS_BACKUP" ]; then
+    mv -f "$ORIGINAL_BOTS_BACKUP" "$BOTS_FILE"
+  else
+    rm -f "$BOTS_FILE"
+  fi
+
+  if [ "$ENV_WAS_PRESENT" -eq 1 ] && [ -f "$ORIGINAL_ENV_BACKUP" ]; then
+    mv -f "$ORIGINAL_ENV_BACKUP" "$ENV_FILE"
+  else
+    rm -f "$ENV_FILE"
+  fi
+
+  rm -f "$OPS_DIR/.deploy-ghost.yaml"
+  rm -rf "$TMP_DIR"
+  exit "$exit_code"
+}
+
+trap cleanup EXIT INT TERM HUP
 
 assert_contains() {
   local file=$1 pattern=$2 desc=$3
@@ -32,8 +60,24 @@ assert_not_contains() {
   fi
 }
 
+prepare_repo_fixtures() {
+  if [ -f "$BOTS_FILE" ]; then
+    BOTS_WAS_PRESENT=1
+    cp "$BOTS_FILE" "$ORIGINAL_BOTS_BACKUP"
+  fi
+
+  if [ -f "$ENV_FILE" ]; then
+    ENV_WAS_PRESENT=1
+    cp "$ENV_FILE" "$ORIGINAL_ENV_BACKUP"
+  fi
+
+  cp "$SCRIPT_DIR/fixtures/bots.test.yaml" "$BOTS_FILE"
+  cp "$SCRIPT_DIR/fixtures/aws-env.test.yaml" "$ENV_FILE"
+}
+
 echo "=== Deploy.sh 測試 ==="
 echo ""
+prepare_repo_fixtures
 
 # --- Test 1: yq 讀取 bots.yaml ---
 echo "Test 1: yq 讀取 bots.yaml"
@@ -79,8 +123,8 @@ fi
 
 # --- Test 4: render ghost 並驗證輸出 ---
 echo "Test 4: render ghost"
-"$SCRIPT_DIR/deploy.sh" ghost render 2>/dev/null
-RENDER_FILE="$SCRIPT_DIR/.deploy-ghost.yaml"
+"$OPS_DIR/deploy.sh" ghost render 2>/dev/null
+RENDER_FILE="$OPS_DIR/.deploy-ghost.yaml"
 
 if [ -f "$RENDER_FILE" ]; then
   echo "  ✅ 渲染檔案已產生"
@@ -122,7 +166,7 @@ fi
 
 # --- Test 5: validate.sh 通過 ---
 echo "Test 5: validate.sh"
-if "$SCRIPT_DIR/validate.sh" >/dev/null 2>&1; then
+if "$OPS_DIR/validate.sh" >/dev/null 2>&1; then
   echo "  ✅ validate.sh 通過"
   PASS=$((PASS + 1))
 else
@@ -132,7 +176,7 @@ fi
 
 # --- Test 6: 測試不存在的 bot ---
 echo "Test 6: 測試不存在的 bot"
-if "$SCRIPT_DIR/deploy.sh" nonexistent_bot render 2>&1 | grep -q "未在 bots.yaml 中定義"; then
+if "$OPS_DIR/deploy.sh" nonexistent_bot render 2>&1 | grep -q "未在 bots.yaml 中定義"; then
   echo "  ✅ 正確拒絕不存在的 bot"
   PASS=$((PASS + 1))
 else

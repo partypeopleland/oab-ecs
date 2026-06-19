@@ -1,0 +1,27 @@
+ghost:
+  backend_agent: agy
+  image: ghcr.io/openabdev/openab-antigravity:0.8.5-beta.9
+  agent_command: agy-acp
+  secret_path: openab/oab-ghost
+  cpu: '256'
+  memory: '512'
+  capacity: FARGATE_SPOT
+  state_bucket: ''
+  pre_boot_url: 'https://gist.githubusercontent.com/example/pre-boot.sh'
+  pre_boot_sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  pre_shutdown_url: 'https://gist.githubusercontent.com/example/pre-shutdown.sh'
+  pre_shutdown_sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+spirit:
+  backend_agent: kiro
+  image: ghcr.io/openabdev/openab:0.8.5-beta.11
+  agent_command: kiro-cli
+  agent_args: '["acp", "--trust-all-tools"]'
+  secret_path: openab/oab-spirit
+  cpu: '256'
+  memory: '512'
+  capacity: FARGATE_SPOT
+  state_bucket: ''
+  pre_boot_url: 'https://gist.githubusercontent.com/example/pre-boot.sh'
+  pre_boot_sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  pre_shutdown_url: 'https://gist.githubusercontent.com/example/pre-shutdown.sh'
+  pre_shutdown_sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'

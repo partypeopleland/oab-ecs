@@ -3,10 +3,27 @@
 # 查詢特定 Bot 的 ECS 服務狀態、任務詳情與最新 CloudWatch 日誌。
 set -e
 
-if [ -z "$1" ]; then
-  echo "使用方法: $0 <bot名稱> [顯示行數]"
-  echo "例如: $0 ghost"
-  echo "      $0 ghost 100"
+usage() {
+  cat <<'EOF'
+用途:
+  查詢指定 bot 的 ECS service 狀態、task 資訊與最近 CloudWatch 日誌。
+
+使用方式:
+  status.sh <bot名稱> [顯示行數]
+
+範例:
+  ops/status.sh ghost
+  ops/status.sh spirit 100
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+if [ -z "${1:-}" ]; then
+  usage
   exit 1
 fi
 
