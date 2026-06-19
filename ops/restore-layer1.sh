@@ -3,10 +3,27 @@
 # 從 S3 下載與還原 Layer 1 (Runtime Home Snapshot) 至本地新路徑
 set -e
 
+usage() {
+  cat <<'EOF'
+用途:
+  從 S3 下載指定 bot 的 Layer 1 runtime snapshot，還原到本地 restored/<bot>/。
+
+使用方式:
+  restore-layer1.sh <bot名稱>
+
+範例:
+  ops/restore-layer1.sh ghost
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 # 檢查引數
-if [ -z "$1" ]; then
-  echo "使用方法: $0 <bot名稱>"
-  echo "例如: $0 ghost"
+if [ -z "${1:-}" ]; then
+  usage
   exit 1
 fi
 

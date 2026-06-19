@@ -23,38 +23,16 @@
 ---
 
 ## ⚙️ Bot 設定檔對照 (`bots.yaml`)
-每個 Bot 專屬的設定都應記錄在 [bots.yaml](../ops/bots.yaml) 中。例如 `ghost` 的設定：
-```yaml
-ghost:
-  backend_agent: agy                           # 類型 (如 agy, codex)
-  image: ghcr.io/openabdev/openab-antigravity:0.8.5-beta.9 # 映像檔
-  agent_command: agy-acp                       # 執行指令
-  secret_path: openab/oab-ghost                # Secrets Manager 的密鑰路徑
-  cpu: '256'
-  memory: '512'
-  capacity: FARGATE_SPOT                       # FARGATE_SPOT (便宜但可能中斷) 或 FARGATE (穩定)
-  state_bucket: ''                             # 備份狀態的 S3 bucket (選填，預設使用全域設定)
-  pre_boot_url: 'https://gist.githubusercontent.com/...' # pre-boot 鉤子腳本網址
-  pre_boot_sha256: 'f3898f7b...'               # 腳本的 SHA-256 雜湊值
-  pre_shutdown_url: 'https://gist.githubusercontent.com/...' # pre-shutdown 鉤子腳本網址
-  pre_shutdown_sha256: '66899a5e...'           # 腳本的 SHA-256 雜湊值
-```
+每個 Bot 專屬的設定都應記錄在 [bots.yaml](../ops/bots.yaml) 中。欄位契約、預設值、模板映射與命名影響請以 [bot_configuration_schema.md](./bot_configuration_schema.md) 為單一來源。
 
 > [!IMPORTANT]
 > `pre_boot_url` / `pre_shutdown_url` 在 deploy 時實際下載的是遠端 gist，不是 repo 內的 `hooks/*.sh`。
 > 因此修改 [hooks/pre-boot.sh](../hooks/pre-boot.sh) 或 [hooks/pre-shutdown.sh](../hooks/pre-shutdown.sh) 後，必須先執行 `ops/sync-hook-gists.sh`，讓 gist 內容與 `bots.yaml` 的 SHA-256 一起更新。完整規範請見 [hooks_gist_sync.md](./hooks_gist_sync.md)。
 
 ## ⚙️ 機器人專屬人設與狀態同步 (Bot Personality & State)
-目前採用 5-layer 模型，請以 [state_layers.md](./state_layers.md) 為唯一來源。
+目前採用 5-layer 模型，S3 路徑、覆蓋順序與責任邊界請以 [state_layers.md](./state_layers.md) 為單一來源。
 
-本地 repo 中可人工維護的靜態層全部位於 `state/layers/`：
-
-1. `state/layers/2-common/`
-2. `state/layers/3-backend/<backend>/`
-3. `state/layers/4-bot/<bot>/`
-4. `state/layers/5-agents/AGENTS.md`
-
-任何上述靜態層修改後，請執行：
+若修改 `state/layers/` 中任何 Layer 2-5 的靜態內容，請執行：
 ```bash
 ops/upload-layers.sh <bot_name>
 ```

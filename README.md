@@ -40,9 +40,12 @@
 * [docs/](./docs) - 相關維運與 AI Agent 指引文件：
   * [aws_infrastructure.md](./docs/aws_infrastructure.md) - AWS 基礎架構初始化指南
   * [aws_secrets_manager.md](./docs/aws_secrets_manager.md) - AWS Secrets Manager 密鑰管理指南
+  * [bot_configuration_schema.md](./docs/bot_configuration_schema.md) - `bots.yaml` 欄位契約與部署模板映射
   * [deployment.md](./docs/deployment.md) - 機器人部署指南
   * [hooks_gist_sync.md](./docs/hooks_gist_sync.md) - hook 腳本與 gist 同步規範
+  * [hook_runtime_lifecycle.md](./docs/hook_runtime_lifecycle.md) - hook 執行生命週期、快取與 runtime state 還原流程
   * [observability.md](./docs/observability.md) - 監控、日誌與容器偵錯指南
+  * [ops_scripts_reference.md](./docs/ops_scripts_reference.md) - `ops/` 常用維運腳本參考
   * [state_layers.md](./docs/state_layers.md) - 狀態分層、本地目錄與 S3 路徑模型
 * [hooks/](./hooks) - 容器啟動與關閉的鉤子腳本目錄，包含 [pre-boot.sh](./hooks/pre-boot.sh) 與 [pre-shutdown.sh](./hooks/pre-shutdown.sh)
 * [state/](./state) - 本地靜態 overlay layers 目錄，對應 Layer 2-5（Layer 1 runtime 不落在 repo）
@@ -59,7 +62,6 @@
   * [check-layers.sh](./ops/check-layers.sh) - 檢查運行中容器的 Layer 2-5 同步狀態 (Bash)
   * [status.sh](./ops/status.sh) - 查詢特定 Bot 的 ECS 服務狀態、任務詳情與最新日誌 (Bash)
   * [sync-hook-gists.sh](./ops/sync-hook-gists.sh) - 將 `hooks/` 目錄中的 hook 腳本同步到 GitHub gist，並刷新 `bots.yaml` 的 SHA-256
-  * [test-deploy.sh](./ops/test-deploy.sh) - 自動化部署腳本的單元測試 (Bash)
   * [tests/](./ops/tests) - 各腳本對應的驗證資料與測試腳本
   * `aws-env.yaml` - (Git 忽略) 自動生成的本地 AWS 環境與網路設定檔案
 * `restored/` - (Git 忽略) 本地測試下載還原之機器人狀態暫存目錄
@@ -96,40 +98,13 @@
 * **[bots.yaml](./ops/bots.yaml)**：僅包含機器人專屬的配置（如 image、secret_path、capacity 等），可安全地提交至 Git。
 * **`ops/aws-env.yaml`**：包含您專屬的 AWS 帳號與網路架構參數（如 subnets, security_groups, cluster, region 等）。此檔案由 [aws-init.sh](./ops/aws-init.sh) 自動生成，並已設定於 `.gitignore` 中，不會被提交。
 
-#### bots.yaml 內容範例：
-```yaml
-ghost:
-  backend_agent: agy                           # Agent 類型 (如 agy, codex)
-  image: ghcr.io/openabdev/openab-antigravity:0.8.5-beta.9
-  agent_command: agy-acp                       # 啟動指令
-  secret_path: openab/oab-ghost                # AWS Secrets Manager Secret ID
-  cpu: '256'
-  memory: '512'
-  capacity: FARGATE_SPOT                       # FARGATE_SPOT (便宜但可能中斷) 或 FARGATE (穩定)
-  state_bucket: ''                             # 狀態備份的 S3 Bucket (選填，預設使用全域設定)
-  pre_boot_url: 'https://gist.githubusercontent.com/...'
-  pre_boot_sha256: 'f3898f7b...'
-  pre_shutdown_url: 'https://gist.githubusercontent.com/...'
-  pre_shutdown_sha256: '66899a5e...'
-```
+`bots.yaml` 的完整欄位契約、預設值與模板映射，請看 [docs/bot_configuration_schema.md](./docs/bot_configuration_schema.md)。
 
 ### 2. 通用模板 (`openab-ecs.yaml.template`)
-定義了標準的 `ecsctl` Fargate Service 設定，包含：
-* 動態設定的 Service Name: `openab-{{name}}-service`
-* 動態帶入的容器映像檔與環境變數
-* 可配置的 `capacity`（FARGATE_SPOT 或 FARGATE）
-* 可配置的 `region`（從 aws-env.yaml 讀取）
-* 在 `config.toml` 中動態載入的 AWS Secrets Manager 參考 `aws-sm://{{secret_path}}#DISCORD_BOT_TOKEN`
-* 整合了 `pre_boot` 與 `pre_shutdown` 鉤子，在容器啟動前載入檔案，並在容器關閉前自動備份到 S3。
+定義標準的 `ecsctl` Fargate Service 設定，部署時由 `ops/deploy.sh` 將 `bots.yaml` 與 `aws-env.yaml` 渲染成實際 YAML。模板欄位如何映射到容器環境與 `config.toml`，請看 [docs/bot_configuration_schema.md](./docs/bot_configuration_schema.md)。
 
 ### 3. 狀態與人設管理機制 (S3 State & Layering)
-當 Bot 容器啟動時，會執行開機鉤子 (`pre-boot.sh`) 來還原與同步狀態。完整模型請見 [state_layers.md](./docs/state_layers.md)。其載入順序為：
-
-1. **Layer 1：runtime snapshot** (`s3://<bucket>/runtime/<bot>/home.tar.gz`)
-2. **Layer 2：全域共用靜態資源** (`s3://<bucket>/layers/2-common/`)
-3. **Layer 3：backend 共用靜態資源** (`s3://<bucket>/layers/3-backend/<backend>/`)
-4. **Layer 4：bot 專屬靜態資源** (`s3://<bucket>/layers/4-bot/<bot>/`)
-5. **Layer 5：共用 AGENTS.md** (`s3://<bucket>/layers/5-agents/AGENTS.md`)
+Bot 狀態分成 Layer 1 runtime snapshot 與 Layer 2-5 靜態 overlay。S3 路徑模型、還原順序與 `upload-layers.sh` 的責任邊界，請看 [docs/state_layers.md](./docs/state_layers.md)。
 
 #### 📌 如何設定「專屬人設」與「工具說明」？
 * **全域共用維運規則**：請編輯 `state/layers/5-agents/AGENTS.md`。
@@ -137,52 +112,49 @@ ghost:
 * **共用工具說明**：請編輯 `state/layers/2-common/TOOLS.md`。
 
 ### 4. 工具快取與下載機制
-為了加速容器啟動並確保冷啟動時的認證穩定性：
-* **`uv` (Python 包管理器)**：優先從 S3 快取路徑 `cache/uv-0.11.21-x86_64-unknown-linux-musl.tar.gz` 獲取，若不存在則下載固定版本 `0.11.21`，並先以官方提供的 `sha256` 檢查再安裝。
-* **`aws` (AWS CLI)**：每次容器啟動時，直接下載固定版本 `2.35.7` 再解壓縮安裝，避免 `latest` 帶來的啟動漂移。
+容器啟動時會安裝固定版本 AWS CLI、優先自 S3 載入 `uv` 快取，並透過 `pre_boot` / `pre_shutdown` 還原與備份 runtime state。完整 lifecycle 請看 [docs/hook_runtime_lifecycle.md](./docs/hook_runtime_lifecycle.md)。
 
 ---
 
 ## 📋 部署 SOP 與指令範例
 
+> [!NOTE]
+> **腳本說明來源**
+> `ops/` 目錄下各腳本的參數、範例與注意事項，請以該腳本本身的 `--help` 為準，例如 `ops/deploy.sh --help`。
+> [docs/ops_scripts_reference.md](./docs/ops_scripts_reference.md) 僅作為一覽表與導覽。
+
 ### 前置作業：初始化環境
-如果您需要自訂自動建立的 AWS 資源名稱或明確指定 VPC / subnet，可以先編輯 [aws-init.yaml](./ops/aws-init.yaml)。
-接著，請確保您已經在本機執行 `aws configure` 完成憑證設定，然後執行初始化腳本：
+先確保本機已完成 `aws configure`，如需自訂資源名稱或明確指定 VPC / subnet，先編輯 [aws-init.yaml](./ops/aws-init.yaml)，再執行：
 ```bash
 ops/aws-init.sh
 ```
-這會自動根據設定檔中的名稱去探測/建立對應的 ECS、IAM、VPC 設定，並產生 `ops/aws-env.yaml` 檔案。
-如果 `aws-init.yaml` 內有填 `vpc_id` 或 `subnet_ids`，腳本會優先採用這些覆寫值，不再完全依賴自動探測。
+初始化細節請看 [docs/aws_infrastructure.md](./docs/aws_infrastructure.md)。
 
 ### 1. 驗證設定
-在部署前，建議先驗證 `bots.yaml` 中所有 Bot 的設定是否合法：
+在部署前，先驗證 `bots.yaml`：
 ```bash
 ops/validate.sh
 ```
-這會檢查必填欄位、CPU/Memory 組合、capacity 值、image 格式等，並提示解決方案。
 
 ### 2. 部署 Bot
 使用自動化部署腳本：
 ```bash
 ops/deploy.sh <bot名稱>
 ```
-例如：
-```bash
-ops/deploy.sh ghost
-```
 
 ### 3. 僅渲染 YAML（不部署）
-如果您只想查看替換後的部署 YAML 檔（用於檢查或手動部署），可加上 `render` 參數：
+如果只想查看替換後的部署 YAML，可加上 `render`：
 ```bash
 ops/deploy.sh ghost render
 ```
-這會在目錄下產生一個 `.deploy-ghost.yaml` 檔案，而不會呼叫 `ecsctl`。
+完整部署流程請看 [docs/deployment.md](./docs/deployment.md)。
 
 ### 4. 查詢服務狀態
-執行以下指令可立即顯示 Bot 的運作情形，並印出最近 15 筆 CloudWatch 日誌：
+快速查看服務與最近日誌：
 ```bash
 ops/status.sh ghost
 ```
+更完整的觀測與偵錯方式請看 [docs/observability.md](./docs/observability.md) 與 [docs/ops_scripts_reference.md](./docs/ops_scripts_reference.md)。
 
 ### 5. 進入容器進行身分認證 (重要)
 如果您的 Bot (例如 Antigravity 等) 在部署後需要手動執行認證登入 (如 `agy auth` 或 `huggingface-cli login`)，請遵循以下步驟進行。
@@ -214,26 +186,16 @@ ops/status.sh ghost
 ```bash
 ops/aws-destroy.sh <bot名稱> [選項]
 ```
-選項：
-- `--purge-state`：同時刪除 S3 中的狀態備份（不可逆）
-- `--purge-secret`：同時刪除 AWS Secrets Manager 中的密鑰（不可逆）
-
-例如：
-```bash
-ops/aws-destroy.sh ghost                        # 僅停止 ECS 服務
-ops/aws-destroy.sh ghost --purge-state          # 停止服務並刪除 S3 狀態
-ops/aws-destroy.sh ghost --purge-state --purge-secret  # 完整清理
-```
+選項與副作用請看 [docs/ops_scripts_reference.md](./docs/ops_scripts_reference.md)。
 
 ### 7. 手動備份與復原 S3 狀態 (非部署流程時使用)
 - **同步本地 overlay layers**：執行 `./ops/upload-layers.sh <bot名稱>`，只會同步 Layer 2-5，不會覆蓋 runtime snapshot。
 - **復原 runtime 狀態至新目錄**：執行 `./ops/restore-layer1.sh <bot名稱>` 從 S3 下載 runtime snapshot，這會放到 `restored/<bot名稱>` 目錄以防覆蓋。
 
+這兩支腳本的責任邊界請看 [docs/state_layers.md](./docs/state_layers.md) 與 [docs/ops_scripts_reference.md](./docs/ops_scripts_reference.md)。
+
 ### 8. 執行測試
-驗證部署腳本的 yq 解析與模板渲染是否正確：
-```bash
-ops/test-deploy.sh
-```
+測試腳本集中放在 `ops/tests/`，供 repo 內部驗證使用。
 
 ---
 
@@ -243,22 +205,7 @@ ops/test-deploy.sh
    在 AWS 建立對應的密鑰（例如 `openab/oab-codex`），至少寫入 `DISCORD_BOT_TOKEN`；若 agent 需要使用 `gh`，同一個 Secret 內再加入 `GH_TOKEN`。可參考 [AWS Secrets Manager 密鑰管理指南](./docs/aws_secrets_manager.md)。
    
 2. **在 `bots.yaml` 新增設定**：
-   在 [bots.yaml](./ops/bots.yaml) 中加入新 Bot 的實體參數。必須包含以下欄位：
-   ```yaml
-   <bot_name>:
-     backend_agent: <agent_type>        # 必填: agy, codex 等
-     image: <container_image>           # 必填: 完整的 image URL
-     agent_command: <command>           # 必填: 啟動指令
-     secret_path: <sm_path>            # 必填: Secrets Manager 路徑
-     cpu: '<cpu_units>'                # 必填: 如 '256', '512', '1024'
-     memory: '<memory_mb>'             # 必填: 如 '512', '1024', '2048'
-     capacity: <FARGATE_SPOT|FARGATE>  # 必填: 容器容量提供者類型
-     state_bucket: ''                   # 選填: 預設使用全域 state_bucket
-     pre_boot_url: '<url>'             # 必填: pre-boot 鉤子腳本 URL
-     pre_boot_sha256: '<hash>'         # 必填: 腳本的 SHA-256 雜湊值
-     pre_shutdown_url: '<url>'         # 必填: pre-shutdown 鉤子腳本 URL
-     pre_shutdown_sha256: '<hash>'     # 必填: 腳本的 SHA-256 雜湊值
-   ```
+   在 [bots.yaml](./ops/bots.yaml) 中加入新 Bot 的實體參數。完整 schema 請看 [docs/bot_configuration_schema.md](./docs/bot_configuration_schema.md)。
 
 3. **驗證設定**：
    ```bash

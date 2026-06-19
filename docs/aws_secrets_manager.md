@@ -9,21 +9,31 @@
 ### 1. 建立密鑰 (Create)
 若特定 Bot 的密鑰路徑（如 `openab/oab-ghost`）在 AWS 中不存在，AI Agent 或開發人員應建立它。我們提供了兩種建立方式：
 
-#### 🛠️ 方法 A：使用自動化建立腳本 (推薦)
-專案中提供了一個便捷的自動化 Bash 腳本 [ops/create-secret.sh](file:///home/art/oab-ecs/ops/create-secret.sh)。它會自動讀取 [ops/aws-env.yaml](file:///home/art/oab-ecs/ops/aws-env.yaml) 中的 AWS Region 設定，並自動將密鑰名稱格式化為 `openab/oab-<bot_name>`。
+#### 🛠️ 方法 A：使用自動化建立/更新腳本 (推薦)
+專案中提供了一個便捷的自動化 Bash 腳本 [ops/create-secret.sh](../ops/create-secret.sh)。它會自動讀取 `ops/aws-env.yaml` 中的 AWS Region 設定，並支援兩種模式。
 
-**使用指令：**
+**舊模式：建立或更新 bot 的 `DISCORD_BOT_TOKEN`**
 ```bash
 ops/create-secret.sh <bot名稱> <DISCORD_BOT_TOKEN>
 ```
 
-* **參數說明**：
-  * `<bot名稱>`：Bot 的名稱（例如 `spirit` 或 `ghost`），腳本會將其自動串接為 `openab/oab-<bot名稱>`。
-  * `<DISCORD_BOT_TOKEN>`：該 Bot 實際使用的 Discord Bot Token。
-* **使用範例**：
-  ```bash
-  ops/create-secret.sh spirit MTIzNDU2Nzg5...
-  ```
+* `<bot名稱>` 會被轉成 secret 名稱 `openab/oab-<bot名稱>`
+* 寫入欄位固定為 `DISCORD_BOT_TOKEN`
+
+**通用模式：指定 secret 名稱、欄位名稱與值**
+```bash
+ops/create-secret.sh <secret名稱> <KEY> <VALUE>
+```
+
+* 可用來寫入任意欄位，例如 `GH_TOKEN`、`GROQ_APIKEY`
+* 若 secret 已存在，腳本會先讀回現有 JSON，再合併新欄位後寫回，不會覆蓋其他 key
+
+**使用範例：**
+```bash
+ops/create-secret.sh spirit MTIzNDU2Nzg5...
+ops/create-secret.sh openab/oab-spirit GH_TOKEN ghp_xxx
+ops/create-secret.sh openab/oab-spirit GROQ_APIKEY gsk_xxx
+```
 
 #### 💻 方法 B：手動使用 AWS CLI 指令
 您也可以手動執行 AWS CLI 指令來建立密鑰：
@@ -49,6 +59,11 @@ aws secretsmanager put-secret-value \
   --secret-id "openab/oab-ghost" \
   --secret-string '{"DISCORD_BOT_TOKEN":"new_discord_bot_token_here","GH_TOKEN":"ghp_new_github_token_here"}' \
   --region us-east-1
+```
+
+若只想透過專案腳本更新單一欄位，可直接使用：
+```bash
+ops/create-secret.sh openab/oab-ghost GH_TOKEN ghp_new_github_token_here
 ```
 
 ### 4. 刪除密鑰 (Delete)

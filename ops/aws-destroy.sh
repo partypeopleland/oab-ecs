@@ -3,17 +3,32 @@
 # 停止並刪除 Bot 的 ECS 服務，可選清理 S3 狀態、Secrets Manager 及 CloudWatch 日誌。
 set -e
 
-if [ -z "$1" ]; then
-  echo "使用方法: $0 <bot名稱> [--purge-state] [--purge-secret]"
-  echo ""
-  echo "選項:"
-  echo "  --purge-state    同時刪除 S3 中的狀態備份 (不可逆)"
-  echo "  --purge-secret   同時刪除 AWS Secrets Manager 中的密鑰 (不可逆)"
-  echo ""
-  echo "例如:"
-  echo "  $0 ghost                    # 僅停止 ECS 服務"
-  echo "  $0 ghost --purge-state      # 停止服務並刪除 S3 狀態"
-  echo "  $0 ghost --purge-state --purge-secret  # 完整清理"
+usage() {
+  cat <<'EOF'
+用途:
+  停止並刪除指定 bot 的 ECS service，並可選擇清理 state 與 secret。
+
+使用方式:
+  aws-destroy.sh <bot名稱> [--purge-state] [--purge-secret]
+
+範例:
+  ops/aws-destroy.sh ghost
+  ops/aws-destroy.sh ghost --purge-state
+  ops/aws-destroy.sh ghost --purge-state --purge-secret
+
+選項:
+  --purge-state    同時刪除 S3 中的 runtime 與 Layer 4 bot 靜態內容
+  --purge-secret   同時刪除 AWS Secrets Manager 中的密鑰
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+if [ -z "${1:-}" ]; then
+  usage
   exit 1
 fi
 
@@ -26,7 +41,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --purge-state)  PURGE_STATE=true ;;
     --purge-secret) PURGE_SECRET=true ;;
-    *) echo "未知的參數: $1"; exit 1 ;;
+    *) echo "未知的參數: $1"; echo ""; usage; exit 1 ;;
   esac
   shift
 done

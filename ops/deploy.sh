@@ -1,15 +1,43 @@
 #!/bin/bash
 set -e
 
+usage() {
+  cat <<'EOF'
+用途:
+  讀取 bots.yaml 與 aws-env.yaml，渲染 ECS 模板並部署 bot。
+
+使用方式:
+  deploy.sh <bot名稱> [apply|render]
+
+範例:
+  ops/deploy.sh ghost
+  ops/deploy.sh spirit render
+
+注意:
+  render 只產生 .deploy-<bot>.yaml，不會呼叫 ecsctl apply。
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 # 檢查引數
-if [ -z "$1" ]; then
-  echo "使用方法: $0 <bot名稱> [apply|render]"
-  echo "例如: $0 ghost"
+if [ -z "${1:-}" ]; then
+  usage
   exit 1
 fi
 
 BOT_NAME=$1
 ACTION=${2:-apply}
+
+if [ "$ACTION" != "apply" ] && [ "$ACTION" != "render" ]; then
+  echo "錯誤: 第二個參數只能是 apply 或 render。"
+  echo ""
+  usage
+  exit 1
+fi
 
 # 定義檔案路徑
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

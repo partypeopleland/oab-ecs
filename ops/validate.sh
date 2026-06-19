@@ -3,6 +3,27 @@
 # 驗證 bots.yaml 中所有 Bot 的設定是否合法，並提示解決方案。
 set -e
 
+usage() {
+  cat <<'EOF'
+用途:
+  驗證 ops/bots.yaml 中所有 bot 設定是否合法。
+
+使用方式:
+  validate.sh
+
+範例:
+  ops/validate.sh
+
+注意:
+  需要 ops/aws-env.yaml 與 yq。
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOTS_FILE="$SCRIPT_DIR/bots.yaml"
 ENV_FILE="$SCRIPT_DIR/aws-env.yaml"
